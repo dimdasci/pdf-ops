@@ -1,0 +1,25 @@
+The task is to develop desktop application using electron and typescript to convert PDFs into markdown files. 
+
+The application must contain setting section to ask for API keys and saves the API in a secure way.
+
+The user flow should be: 
+- open PDF file to translate using Open File dialog or by drag-n-drop on main window.  
+- show document metadata: number of pages, date of creation
+- show document view with page navigation
+- if document has embedded table of contents, show it too
+- user clicks button convert
+- document is converting to markdown
+- markdown content is shown aside the pdf pages for visual review and correction
+
+
+Conversion should be done using Gemini LLMs in several passes:
+- detect general document features: language, presence of table of contents and pages with table of contents, authors, dates, number of tables and number of images. 
+- Page by page conversion, where for every page we provide document context, content of previous page, and apply reasoning technique in prompt like asking if page has images, tables, footnotes before generating the page content in markdown. 
+
+Conversion must preserve:
+- document logical structure, using correct headers level. For that table of contents must be either extracted from the document, it presents, of inferred in a dedicated pass before content conversion,
+- images, for this application must extract images from the page and properly embedded into markdown as inline image
+- tables
+- footnotes, which should be put after the paragraph where they are mentioned. If you know other best practices how to present footnotes in the document, please suggest.
+
+Finally, user should be able to save markdown document on disk.
