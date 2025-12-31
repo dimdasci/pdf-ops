@@ -132,10 +132,21 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             
             // Replace image placeholders with actual data URLs
             // Placeholder format: ![Description of image](image_placeholder_{pageNum}_X)
-            extractedImages.forEach((imgDataUrl, idx) => {
-                const placeholder = `image_placeholder_${i}_${idx + 1}`;
-                pageContent = pageContent.replace(placeholder, imgDataUrl);
-            });
+            if (extractedImages.length > 0) {
+                extractedImages.forEach((imgDataUrl, idx) => {
+                    const placeholder = `image_placeholder_${i}_${idx + 1}`;
+                    // Use replaceAll to ensure all instances are replaced
+                    pageContent = pageContent.replaceAll(placeholder, imgDataUrl);
+                });
+            } else {
+                console.log(`No images extracted for page ${i}`);
+            }
+
+            // Fallback for unreplaced placeholders (extraction failed or mismatch)
+            pageContent = pageContent.replace(
+                /!\[(.*?)\]\(image_placeholder_\d+_\d+\)/g, 
+                '> *[Image extraction failed or image not found for: $1]*'
+            );
             
             currentMarkdown += pageContent + '\n\n';
             setMarkdown((prev) => prev + pageContent + '\n\n');

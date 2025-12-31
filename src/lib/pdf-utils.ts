@@ -66,36 +66,64 @@ export const extractImagesFromPage = async (pdf: pdfjsLib.PDFDocumentProxy, page
     const operatorList = await page.getOperatorList();
     const images: string[] = [];
     
-    // operatorList.fnArray and operatorList.argsArray contain the operations
+    // Access OPS safely
+    const OPS = (pdfjsLib as any).OPS;
+    if (!OPS) {
+        console.error('PDF.js OPS not found');
+        return [];
+    }
+    
     for (let i = 0; i < operatorList.fnArray.length; i++) {
-        // OPS.paintImageXObject or OPS.paintInlineImageXObject
-        if (operatorList.fnArray[i] === (pdfjsLib as any).OPS.paintImageXObject || 
-            operatorList.fnArray[i] === (pdfjsLib as any).OPS.paintInlineImageXObject) {
-            
+        const fn = operatorList.fnArray[i];
+        
+        if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
             const imageName = operatorList.argsArray[i][0];
             try {
+                // Determine where to get the image from (local objs or common objs)
+                // Note: page.objs.get serves as a unified accessor in recent versions but explicit check helps
                 const image = await page.objs.get(imageName);
+                
                 if (image && image.data) {
-                    // Convert image data to data URL
+                    const { width, height, data, kind } = image;
+                    
                     const canvas = document.createElement('canvas');
-                    canvas.width = image.width;
-                    canvas.height = image.height;
+                    canvas.width = width;
+                    canvas.height = height;
                     const ctx = canvas.getContext('2d');
+                    
                     if (ctx) {
-                        const imageData = ctx.createImageData(image.width, image.height);
-                        // PDF.js image data format can vary, usually RGBA or RGB
-                        // For simplicity in this prototype, we'll assume it's compatible or handle basic cases
-                        if (image.data.length === image.width * image.height * 4) {
-                            imageData.data.set(image.data);
-                        } else {
-                            // Basic RGB to RGBA conversion if needed
-                            for (let j = 0, k = 0; j < image.data.length; j += 3, k += 4) {
-                                imageData.data[k] = image.data[j];
-                                imageData.data[k+1] = image.data[j+1];
-                                imageData.data[k+2] = image.data[j+2];
+                        const imageData = ctx.createImageData(width, height);
+                        
+                        // Handle different image kinds
+                        // kind: 1 = Grayscale, 2 = RGB, 3 = RGBA
+                        // If kind is missing, infer from data length
+                        
+                        if (kind === 1 || (data.length === width * height)) {
+                            // Grayscale
+                            for (let j = 0, k = 0; j < data.length; j++, k += 4) {
+                                const val = data[j];
+                                imageData.data[k] = val;
+                                imageData.data[k+1] = val;
+                                imageData.data[k+2] = val;
                                 imageData.data[k+3] = 255;
                             }
+                        } else if (kind === 2 || (data.length === width * height * 3)) {
+                            // RGB
+                            for (let j = 0, k = 0; j < data.length; j += 3, k += 4) {
+                                imageData.data[k] = data[j];
+                                imageData.data[k+1] = data[j+1];
+                                imageData.data[k+2] = data[j+2];
+                                imageData.data[k+3] = 255;
+                            }
+                        } else if (kind === 3 || (data.length === width * height * 4)) {
+                            // RGBA
+                            imageData.data.set(data);
+                        } else {
+                            // Fallback or unknown format (e.g. CMYK), skip for now or try basic copy
+                            console.warn(`Unknown image format for ${imageName}: length=${data.length}, w=${width}, h=${height}`);
+                            continue;
                         }
+
                         ctx.putImageData(imageData, 0, 0);
                         images.push(canvas.toDataURL('image/png'));
                     }

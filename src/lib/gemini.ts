@@ -53,7 +53,7 @@ export class GeminiService {
       Now, generate the Markdown content following these rules:
       1. Preserve the logical structure (headers, lists, paragraphs).
       2. Format tables as standard GitHub-Flavored Markdown tables.
-      3. For images, use the following syntax: ![Description of image](image_placeholder_${context.pageNumber}_X) where X is the image number on the page.
+      3. For images, use the following syntax: ![Description of image](image_placeholder_${context.pageNumber}_X) where X is the sequential number of the image on the page (1, 2, 3...).
       4. Place footnotes immediately after the paragraph where they are cited, using a blockquote or a clear "Footnote:" prefix.
       5. Ensure mathematical formulas are in LaTeX if applicable.
       6. Do NOT output standard markdown "frontmatter" or code block fences (\\\`\\\`\\\`). Just the content.
