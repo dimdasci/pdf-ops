@@ -11,7 +11,7 @@ export interface PDFMetadata {
   numPages: number;
   fingerprint: string;
   info?: Record<string, unknown>;
-  outline?: any[];
+  outline?: unknown[];
 }
 
 export const loadPDF = async (buffer: Uint8Array) => {
@@ -67,7 +67,7 @@ export const extractImagesFromPage = async (pdf: pdfjsLib.PDFDocumentProxy, page
     const images: string[] = [];
     
     // Access OPS safely
-    const OPS = (pdfjsLib as any).OPS;
+    const OPS = pdfjsLib.OPS;
     if (!OPS) {
         console.error('PDF.js OPS not found');
         return [];
@@ -77,7 +77,7 @@ export const extractImagesFromPage = async (pdf: pdfjsLib.PDFDocumentProxy, page
         const fn = operatorList.fnArray[i];
         
         if (fn === OPS.paintImageXObject || fn === OPS.paintInlineImageXObject) {
-            const imageName = operatorList.argsArray[i][0];
+            const imageName = operatorList.argsArray[i][0] as string;
             try {
                 // Determine where to get the image from (local objs or common objs)
                 // Note: page.objs.get serves as a unified accessor in recent versions but explicit check helps

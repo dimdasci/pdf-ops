@@ -6,6 +6,11 @@ import type { PDFMetadata } from '../lib/pdf-utils';
 import { GeminiService } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 
+interface OutlineItem {
+  title: string;
+  items?: OutlineItem[];
+}
+
 interface WorkspaceProps {
   filePath: string;
   onClose: () => void;
@@ -51,7 +56,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
   useEffect(() => {
     if (showOutline) return;
 
-    let renderTask: any = null;
+    let renderTask: pdfjsLib.RenderTask | null = null;
 
     const renderPage = async () => {
         if (!canvasRef.current || !pdfDoc) return;
@@ -73,10 +78,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                 });
                 await renderTask.promise;
             }
-        } catch(err: any) {
-            if (err.name !== 'RenderingCancelledException') {
-                console.error("Page render error", err);
+        } catch(err: unknown) {
+            if (err instanceof Error && err.name === 'RenderingCancelledException') {
+                return;
             }
+            console.error("Page render error", err);
         }
     }
     renderPage();
@@ -171,7 +177,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
   };
 
   // Helper to render outline recursively
-  const renderOutline = (items: any[]) => {
+  const renderOutline = (items: OutlineItem[]) => {
       return (
           <ul className="pl-4 space-y-2 text-sm text-zinc-300">
               {items.map((item, idx) => (
@@ -256,7 +262,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                      <div className="flex items-center gap-2 text-zinc-500">Loading PDF...</div>
                  ) : showOutline && metadata?.outline ? (
                      <div className="w-full max-w-lg">
-                        {renderOutline(metadata.outline)}
+                        {renderOutline(metadata.outline as OutlineItem[])}
                      </div>
                  ) : (
                      <canvas 
