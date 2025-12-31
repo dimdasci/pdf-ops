@@ -38,34 +38,40 @@ export class GeminiService {
   async convertPage(
     pageImageBase64: string, 
     context: { previousContent: string; pageNumber: number, totalPages: number }
-  ): Promise<string> {
+  ): Promise<{ content: string; images: Record<string, number[]> }> {
     const prompt = `
       You are an expert document converter. Your task is to convert the attached image of a document page (Page ${context.pageNumber} of ${context.totalPages}) into high-quality Markdown.
       
       STEP 1: REASONING
-      Before generating the markdown, analyze the page and answer:
-      - Are there any images or charts? (Describe their position and content)
-      - Are there any tables? (Identify columns and rows)
-      - are there any footnotes? (Look for small superscript numbers and corresponding text at the bottom)
-      - What is the logical heading level for this page?
+      - Identify all visual elements (photos, charts, diagrams, vector logos) that should be preserved.
+      - For each element, estimate its Bounding Box [ymin, xmin, ymax, xmax] on a scale of 0-1000 (0,0 is top-left).
       
       STEP 2: CONVERSION
-      Now, generate the Markdown content following these rules:
-      1. Preserve the logical structure (headers, lists, paragraphs).
-      2. Format tables as standard GitHub-Flavored Markdown tables.
-      3. For images, use the following syntax: ![Description of image](image_placeholder_${context.pageNumber}_X) where X is the sequential number of the image on the page (1, 2, 3...).
-      4. Place footnotes immediately after the paragraph where they are cited, using a blockquote or a clear "Footnote:" prefix.
-      5. Ensure mathematical formulas are in LaTeX if applicable.
-      6. Do NOT output standard markdown "frontmatter" or code block fences (\\\`\\\`\\\`). Just the content.
-      7. Maintain continuity from the previous page: ...${context.previousContent.slice(-300)}
-
+      Generate the Markdown content:
+      1. Preserve structure (headers, lists).
+      2. For EVERY visual element identified, insert a placeholder: \`![Description](img_placeholder_X)\` where X is a unique ID (e.g., "1", "logo", "chart").
+      3. Do NOT use the previously mentioned "extracted images" logic. Rely purely on what you see.
+      
+      STEP 3: COORDINATES (Crucial)
+      At the VERY END of your response, output a JSON block mapping the placeholder IDs to their coordinates.
+      KEYS must be the exact string used inside the parenthesis in the markdown (e.g., "img_placeholder_1").
+      Format:
+      \`\`\`json
+      {
+        "img_placeholder_1": [ymin, xmin, ymax, xmax],
+        "img_placeholder_logo": [0, 0, 150, 200]
+      }
+      \`\`\`
       
       Output format:
       [REASONING]
-      (Your analysis here)
-      
+      ...
       [CONTENT]
-      (Your markdown here)
+      ... markdown ...
+      [COORDINATES]
+      \`\`\`json
+      ...
+      \`\`\`
     `;
 
     try {
@@ -81,13 +87,25 @@ export class GeminiService {
       const response = await result.response;
       const text = response.text();
       
-      // Extract only the content part for the final document, 
-      // but we could also log the reasoning.
-      const contentMatch = text.match(/\[CONTENT\]([\s\S]*)/i);
-      return contentMatch ? contentMatch[1].trim() : text;
+      // Extract Content
+      const contentMatch = text.match(/\[CONTENT\]([\s\S]*?)(\[COORDINATES\]|$)/i);
+      const content = contentMatch ? contentMatch[1].trim() : text;
+
+      // Extract Coordinates
+      const coordMatch = text.match(/\[COORDINATES\]\s*`{3}json([\s\S]*?)`{3}/i);
+      let images = {};
+      if (coordMatch) {
+          try {
+              images = JSON.parse(coordMatch[1]);
+          } catch (e) {
+              console.error("Failed to parse coordinates JSON", e);
+          }
+      }
+
+      return { content, images };
     } catch (error) {
       console.error(`Page ${context.pageNumber} conversion failed:`, error);
-      return `\n\n[Error converting page ${context.pageNumber}]\n\n`;
+      return { content: `\n\n[Error converting page ${context.pageNumber}]\n\n`, images: {} };
     }
   }
 }

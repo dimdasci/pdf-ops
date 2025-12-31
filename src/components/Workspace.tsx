@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, BookOpen, FileCode, Play, Save, Loader2 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { loadPDF, getMetadata, renderPageToImage, getPageText, extractImagesFromPage } from '../lib/pdf-utils';
+import { loadPDF, getMetadata, renderPageToImage, getPageText } from '../lib/pdf-utils';
+import { cropImageFromCanvas } from '../lib/image-utils';
 import type { PDFMetadata } from '../lib/pdf-utils';
 import { GeminiService } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
@@ -126,32 +127,38 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             setConversionStatus(`Converting page ${i} of ${metadata.numPages}...`);
             setCurrentPage(i); // Sync view
             
-            // Extract images from this page
-            const extractedImages = await extractImagesFromPage(pdfDoc, i);
-            
             const imageBase64 = await renderPageToImage(pdfDoc, i);
-            let pageContent = await gemini.convertPage(imageBase64, {
+            let { content: pageContent, images } = await gemini.convertPage(imageBase64, {
                 previousContent: currentMarkdown,
                 pageNumber: i,
                 totalPages: metadata.numPages
             });
             
-            // Replace image placeholders with actual data URLs
-            // Placeholder format: ![Description of image](image_placeholder_{pageNum}_X)
-            if (extractedImages.length > 0) {
-                extractedImages.forEach((imgDataUrl, idx) => {
-                    const placeholder = `image_placeholder_${i}_${idx + 1}`;
-                    // Use replaceAll to ensure all instances are replaced
-                    pageContent = pageContent.replaceAll(placeholder, imgDataUrl);
-                });
+            // Visual Extraction: Replace placeholders with cropped images
+            const placeholders = Object.keys(images);
+            if (placeholders.length > 0) {
+                for (const placeholder of placeholders) {
+                    try {
+                        const bbox = images[placeholder];
+                        const croppedDataUrl = await cropImageFromCanvas(imageBase64, bbox);
+                        // Replace all instances of the placeholder
+                        // Escape the placeholder for regex usage if needed, but it's simple alphanumeric usually
+                        // We use global replaceAll
+                         pageContent = pageContent.replaceAll(placeholder, croppedDataUrl);
+                    } catch (err) {
+                        console.error(`Failed to crop image for ${placeholder}`, err);
+                    }
+                }
             } else {
-                console.log(`No images extracted for page ${i}`);
+                console.log(`No visual elements identified for page ${i}`);
             }
 
             // Fallback for unreplaced placeholders (extraction failed or mismatch)
+            // Regex to find remaining image syntax like ![desc](img_placeholder_X)
+            // Note: The prompt asks to use `img_placeholder_X` as the URL.
             pageContent = pageContent.replace(
-                /!\[(.*?)\]\(image_placeholder_\d+_\d+\)/g, 
-                '> *[Image extraction failed or image not found for: $1]*'
+                /!\[(.*?)\]\((img_placeholder_[a-zA-Z0-9_]+)\)/g, 
+                '> *[Image extraction failed or coordinates missing for: $1]*'
             );
             
             currentMarkdown += pageContent + '\n\n';
