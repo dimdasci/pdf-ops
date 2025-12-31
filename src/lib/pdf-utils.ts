@@ -33,7 +33,7 @@ export const getMetadata = async (pdf: pdfjsLib.PDFDocumentProxy): Promise<PDFMe
     };
 }
 
-export const renderPageToImage = async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, scale: number = 1.5): Promise<string> => {
+export const renderPageToImage = async (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, scale: number = 2.0): Promise<string> => {
     const page = await pdf.getPage(pageNum);
     const viewport = page.getViewport({ scale });
     

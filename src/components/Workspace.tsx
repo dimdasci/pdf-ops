@@ -6,6 +6,7 @@ import { cropImageFromCanvas } from '../lib/image-utils';
 import type { PDFMetadata } from '../lib/pdf-utils';
 import { GeminiService } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface OutlineItem {
   title: string;
@@ -24,6 +25,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isConverting, setIsConverting] = useState(false);
   const [conversionStatus, setConversionStatus] = useState('');
+  const [detectedLanguage, setDetectedLanguage] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [showOutline, setShowOutline] = useState(false);
@@ -108,7 +110,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         }
 
         const gemini = new GeminiService(apiKey);
-        setMarkdown('# Converting...\n');
+        setMarkdown(''); // Clear previous content
+        setDetectedLanguage('');
 
         // Pass 1: Analysis (First 3 pages)
         setConversionStatus('Analyzing document structure...');
@@ -118,8 +121,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         }
         
         const analysis = await gemini.analyzeDocumentStructure(firstPagesText);
-        setMarkdown(() => `# Converted Document\n\n**Language:** ${analysis.language} | **TOC:** ${analysis.hasTOC ? 'Yes' : 'No'}\n\n---\n\n`);
-
+        setDetectedLanguage(analysis.language);
+        
         // Pass 2: Page by Page
         let currentMarkdown = ''; // Keep track locally to pass context
         
@@ -128,22 +131,36 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             setCurrentPage(i); // Sync view
             
             const imageBase64 = await renderPageToImage(pdfDoc, i);
-            let { content: pageContent, images } = await gemini.convertPage(imageBase64, {
+            const conversionResult = await gemini.convertPage(imageBase64, {
                 previousContent: currentMarkdown,
                 pageNumber: i,
                 totalPages: metadata.numPages
             });
+            let pageContent = conversionResult.content;
+            const images = conversionResult.images;
             
+            console.log(`[Page ${i}] Generated Markdown (Pre-replace):`, pageContent);
+            console.log(`[Page ${i}] Generated Images Map:`, images);
+
             // Visual Extraction: Replace placeholders with cropped images
             const placeholders = Object.keys(images);
             if (placeholders.length > 0) {
                 for (const placeholder of placeholders) {
                     try {
                         const bbox = images[placeholder];
+                        if (!bbox || bbox.length !== 4) {
+                            console.warn(`[Page ${i}] Invalid bbox for ${placeholder}:`, bbox);
+                            continue;
+                        }
+
                         const croppedDataUrl = await cropImageFromCanvas(imageBase64, bbox);
+                        if (!croppedDataUrl) {
+                            console.warn(`[Page ${i}] Cropped image is empty for ${placeholder}`);
+                            continue;
+                        }
+
+                        console.log(`[Page ${i}] Replaced ${placeholder} with data URL (length: ${croppedDataUrl.length})`);
                         // Replace all instances of the placeholder
-                        // Escape the placeholder for regex usage if needed, but it's simple alphanumeric usually
-                        // We use global replaceAll
                          pageContent = pageContent.replaceAll(placeholder, croppedDataUrl);
                     } catch (err) {
                         console.error(`Failed to crop image for ${placeholder}`, err);
@@ -153,13 +170,19 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                 console.log(`No visual elements identified for page ${i}`);
             }
 
-            // Fallback for unreplaced placeholders (extraction failed or mismatch)
-            // Regex to find remaining image syntax like ![desc](img_placeholder_X)
-            // Note: The prompt asks to use `img_placeholder_X` as the URL.
+            // Fallback for unreplaced placeholders
             pageContent = pageContent.replace(
                 /!\[(.*?)\]\((img_placeholder_[a-zA-Z0-9_]+)\)/g, 
                 '> *[Image extraction failed or coordinates missing for: $1]*'
             );
+
+            // Sanitize: Replace empty image sources that cause browser errors
+            pageContent = pageContent.replace(/!\[(.*?)\]\(\s*\)/g, '> *[Image missing: $1]*');
+
+            // Log if any empty image sources remain
+            if (pageContent.includes(']()')) {
+                 console.warn(`[Page ${i}] Markdown contains empty image sources:`, pageContent.match(/!\[.*?\]\(\)/g));
+            }
             
             currentMarkdown += pageContent + '\n\n';
             setMarkdown((prev) => prev + pageContent + '\n\n');
@@ -219,6 +242,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         </div>
 
         <div className="flex items-center gap-4">
+            {detectedLanguage && (
+                 <span className="text-xs text-zinc-400 bg-zinc-800 px-2 py-1 rounded border border-zinc-700">
+                    {detectedLanguage}
+                 </span>
+            )}
             {isConverting && (
                 <span className="text-xs text-indigo-400 animate-pulse">
                     {conversionStatus}
@@ -321,10 +349,31 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                 </button>
             </div>
             
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto bg-zinc-900/30">
                 {activeTab === 'preview' ? (
-                    <div className="p-8 prose prose-invert prose-zinc max-w-none">
-                        <ReactMarkdown>{markdown}</ReactMarkdown>
+                    <div className="p-12 max-w-4xl mx-auto text-zinc-300">
+                        <div className="mb-4 text-xs text-zinc-500 font-mono border-b border-zinc-800 pb-2">
+                             Debug: Content Length = {markdown.length} chars
+                        </div>
+                        <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            urlTransform={(url) => url}
+                            components={{
+                                table: (props) => <table className="border-collapse border border-zinc-700 w-full my-4" {...props} />,
+                                th: (props) => <th className="border border-zinc-700 bg-zinc-800 p-2 text-left" {...props} />,
+                                td: (props) => <td className="border border-zinc-700 p-2" {...props} />,
+                                h1: (props) => <h1 className="text-3xl font-bold text-white mt-8 mb-4" {...props} />,
+                                h2: (props) => <h2 className="text-2xl font-semibold text-white mt-6 mb-3" {...props} />,
+                                h3: (props) => <h3 className="text-xl font-medium text-white mt-4 mb-2" {...props} />,
+                                ul: (props) => <ul className="list-disc list-inside my-4 space-y-1" {...props} />,
+                                ol: (props) => <ol className="list-decimal list-inside my-4 space-y-1" {...props} />,
+                                blockquote: (props) => <blockquote className="border-l-4 border-indigo-500 pl-4 italic my-4 text-zinc-400" {...props} />,
+                                p: (props) => <p className="mb-4 leading-relaxed" {...props} />,
+                                a: (props) => <a className="text-indigo-400 hover:text-indigo-300 underline" {...props} />,
+                            }}
+                        >
+                            {markdown}
+                        </ReactMarkdown>
                     </div>
                 ) : (
                     <textarea 
