@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, BookOpen, FileCode, Play, Save, Loader2 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { loadPDF, getMetadata, renderPageToImage, getPageText } from '../lib/pdf-utils';
+import { loadPDF, getMetadata, renderPageToImage } from '../lib/pdf-utils';
 import { cropImageFromCanvas } from '../lib/image-utils';
 import type { PDFMetadata } from '../lib/pdf-utils';
-import { GeminiService } from '../lib/gemini';
+import { convertPdfToMarkdown } from '../lib/converter';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
