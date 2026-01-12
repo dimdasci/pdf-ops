@@ -11,7 +11,9 @@
     "electron:start": "electron .",
     "start": "concurrently \"npm run dev\" \"wait-on tcp:5173 && npm run electron:build && cross-env NODE_ENV=development npm run electron:start\"",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "vitest run --config tests/vitest.config.ts",
+    "test:e2e:watch": "vitest --config tests/vitest.config.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -37,7 +39,9 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@types/string-similarity": "^4.0.2",
     "@vitejs/plugin-react": "^5.1.1",
+    "canvas": "^3.2.1",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^39.2.7",
@@ -46,9 +50,14 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "remark-parse": "^11.0.0",
+    "string-similarity": "^4.0.4",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0",
     "vite": "^7.2.4",
+    "vitest": "^3.2.4",
     "wait-on": "^9.0.3"
   }
 }

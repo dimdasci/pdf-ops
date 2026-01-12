@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "name": "arxiv-guidelines",
+    "pageCount": 10,
+    "language": "en"
+  },
+  "structure": {
+    "headings": {
+      "byLevel": {
+        "h1": 5,
+        "h2": 11,
+        "h3": 0,
+        "h4": 0,
+        "h5": 0,
+        "h6": 0
+      },
+      "items": [
+        { "level": 1, "text": "Introduction" },
+        { "level": 1, "text": "Ten Essential Guidelines" },
+        { "level": 2, "text": "Guideline 1: Plan Before You Code" },
+        { "level": 2, "text": "Guideline 2: Design for Modularity" },
+        { "level": 2, "text": "Guideline 3: Write Clean and Readable Code" },
+        { "level": 2, "text": "Guideline 4: Use Version Control" },
+        { "level": 2, "text": "Guideline 5: Test Your Code Regularly" },
+        { "level": 2, "text": "Guideline 6: Make Peer Code Review a Standard Practice" },
+        { "level": 2, "text": "Guideline 7: Document Everything" },
+        { "level": 2, "text": "Guideline 8: Strive for Reproducibility" },
+        { "level": 2, "text": "Guideline 9: Pay Attention to Performance and Scalability, as Necessary" },
+        { "level": 2, "text": "Guideline 10: Plan for Long-Term Maintenance" },
+        { "level": 1, "text": "Conclusion" },
+        { "level": 1, "text": "Acknowledgments" },
+        { "level": 1, "text": "References" },
+        { "level": 2, "text": "Author Biographies" }
+      ]
+    },
+    "hierarchyValid": true
+  },
+  "content": {
+    "images": {
+      "count": 0
+    },
+    "tables": {
+      "count": 0,
+      "details": []
+    },
+    "codeBlocks": {
+      "count": 0,
+      "languages": []
+    }
+  },
+  "format": {
+    "shouldParse": true
+  }
+}

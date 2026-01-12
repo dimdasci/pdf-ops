@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "name": "arxiv-roadmap",
+    "pageCount": 4,
+    "language": "en"
+  },
+  "structure": {
+    "headings": {
+      "byLevel": {
+        "h1": 1,
+        "h2": 5,
+        "h3": 3,
+        "h4": 0,
+        "h5": 0,
+        "h6": 0
+      },
+      "items": [
+        { "level": 1, "text": "2016 arXiv Roadmap" },
+        { "level": 2, "text": "Technical" },
+        { "level": 2, "text": "User Support and Moderation" },
+        { "level": 2, "text": "Business Model & Governance" },
+        { "level": 2, "text": "New Partnerships & Communication" },
+        { "level": 2, "text": "Special Projects" },
+        { "level": 3, "text": "Interoperability & Public Access Mandate Support" },
+        { "level": 3, "text": "Modernize the User Interface & Alerting System" },
+        { "level": 3, "text": "Software Restructuring & Improvement" }
+      ]
+    },
+    "hierarchyValid": true
+  },
+  "content": {
+    "images": {
+      "count": 0
+    },
+    "tables": {
+      "count": 0,
+      "details": []
+    },
+    "codeBlocks": {
+      "count": 0,
+      "languages": []
+    }
+  },
+  "format": {
+    "shouldParse": true
+  }
+}
