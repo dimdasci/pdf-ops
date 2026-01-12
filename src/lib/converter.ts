@@ -1,6 +1,5 @@
-import * as pdfjsLib from 'pdfjs-dist';
 import { GeminiService } from './gemini';
-import { getPageText } from './pdf-utils';
+import type { PdfService, RenderOptions } from './pdf-service/types';
 
 export interface ConversionResult {
   markdown: string;
@@ -15,30 +14,36 @@ export interface ConversionResult {
 export interface ConversionOptions {
   apiKey: string;
   onProgress?: (status: string, page: number, total: number) => void;
-  renderPageToImage: (pdf: pdfjsLib.PDFDocumentProxy, pageNum: number, scale?: number) => Promise<string>;
-  cropImage: (base64Image: string, bbox: number[]) => Promise<string>;
+  /** Optional render options for page rendering (DPI, etc.) */
+  renderOptions?: RenderOptions;
 }
 
 /**
  * Converts a PDF document to Markdown using Gemini LLM.
- * This function is used by both the application (with browser canvas) and tests (with node-canvas).
+ *
+ * This function works with any PdfService implementation, allowing it to run
+ * in both browser (Electron) and Node.js (tests/API) environments.
+ *
+ * @param pdfService - Initialized PDF service instance
+ * @param options - Conversion options including API key and callbacks
+ * @returns Conversion result with markdown, metadata, and per-page content
  */
 export async function convertPdfToMarkdown(
-  pdfDoc: pdfjsLib.PDFDocumentProxy,
-  numPages: number,
+  pdfService: PdfService,
   options: ConversionOptions
 ): Promise<ConversionResult> {
-  const { apiKey, onProgress, renderPageToImage, cropImage } = options;
+  const { apiKey, onProgress, renderOptions } = options;
 
   const gemini = new GeminiService(apiKey);
   const pageContents: string[] = [];
   let fullMarkdown = '';
+  const numPages = pdfService.getPageCount();
 
   // Pass 1: Analysis (First 3 pages)
   onProgress?.('Analyzing document structure...', 0, numPages);
   let firstPagesText = '';
   for (let i = 1; i <= Math.min(3, numPages); i++) {
-    firstPagesText += await getPageText(pdfDoc, i) + '\n';
+    firstPagesText += await pdfService.getPageText(i) + '\n';
   }
 
   const analysis = await gemini.analyzeDocumentStructure(firstPagesText);
@@ -49,7 +54,7 @@ export async function convertPdfToMarkdown(
   for (let i = 1; i <= numPages; i++) {
     onProgress?.(`Converting page ${i} of ${numPages}...`, i, numPages);
 
-    const imageBase64 = await renderPageToImage(pdfDoc, i);
+    const imageBase64 = await pdfService.renderPage(i, renderOptions);
     const conversionResult = await gemini.convertPage(imageBase64, {
       previousContent: currentMarkdown,
       pageNumber: i,
@@ -70,7 +75,7 @@ export async function convertPdfToMarkdown(
             continue;
           }
 
-          const croppedDataUrl = await cropImage(imageBase64, bbox);
+          const croppedDataUrl = await pdfService.cropImage(imageBase64, { bbox });
           if (!croppedDataUrl) {
             console.warn(`[Page ${i}] Cropped image is empty for ${placeholder}`);
             continue;

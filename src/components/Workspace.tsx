@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, BookOpen, FileCode, Play, Save, Loader2 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { loadPDF, getMetadata, renderPageToImage } from '../lib/pdf-utils';
-import { cropImageFromCanvas } from '../lib/image-utils';
-import type { PDFMetadata } from '../lib/pdf-utils';
-import { convertPdfToMarkdown } from '../lib/converter';
+import { BrowserPdfService } from '../lib/pdf-service/browser';
+import type { PdfMetadata } from '../lib/pdf-service/types';
+import { GeminiService } from '../lib/gemini';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -19,8 +18,9 @@ interface WorkspaceProps {
 }
 
 export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
+  const [pdfService, setPdfService] = useState<BrowserPdfService | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
-  const [metadata, setMetadata] = useState<PDFMetadata | null>(null);
+  const [metadata, setMetadata] = useState<PdfMetadata | null>(null);
   const [markdown, setMarkdown] = useState<string>('# Translated Document\n\nClick "Convert" to start...');
   const [isLoading, setIsLoading] = useState(true);
   const [isConverting, setIsConverting] = useState(false);
@@ -29,7 +29,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [showOutline, setShowOutline] = useState(false);
-  
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -42,11 +42,21 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         }
         // Read file using Electron IPC
         const buffer = await window.electronAPI.readFileBuffer(filePath);
-        const doc = await loadPDF(buffer);
-        const meta = await getMetadata(doc);
-        
-        setPdfDoc(doc);
+
+        // Create PDF service
+        const service = new BrowserPdfService();
+        await service.load(buffer);
+
+        const meta = await service.getMetadata();
+
+        setPdfService(service);
         setMetadata(meta);
+
+        // Also load raw pdfjs doc for canvas rendering
+        const pdfjsLib = await import('pdfjs-dist');
+        const loadingTask = pdfjsLib.getDocument({ data: buffer });
+        const doc = await loadingTask.promise;
+        setPdfDoc(doc);
       } catch (error) {
         console.error('Failed to load PDF:', error);
       } finally {
@@ -54,6 +64,11 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
       }
     };
     init();
+
+    // Cleanup on unmount
+    return () => {
+      pdfService?.destroy();
+    };
   }, [filePath]);
 
   useEffect(() => {
@@ -98,8 +113,8 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
   }, [pdfDoc, currentPage, showOutline]);
 
   const handleConvert = async () => {
-    if (!pdfDoc || !metadata) return;
-    
+    if (!pdfService || !metadata) return;
+
     setIsConverting(true);
     try {
         const apiKey = await window.electronAPI.getApiKey();
@@ -113,32 +128,34 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         setMarkdown(''); // Clear previous content
         setDetectedLanguage('');
 
+        const numPages = metadata.pageCount;
+
         // Pass 1: Analysis (First 3 pages)
         setConversionStatus('Analyzing document structure...');
         let firstPagesText = '';
-        for (let i = 1; i <= Math.min(3, metadata.numPages); i++) {
-            firstPagesText += await getPageText(pdfDoc, i) + '\n';
+        for (let i = 1; i <= Math.min(3, numPages); i++) {
+            firstPagesText += await pdfService.getPageText(i) + '\n';
         }
-        
+
         const analysis = await gemini.analyzeDocumentStructure(firstPagesText);
         setDetectedLanguage(analysis.language);
-        
+
         // Pass 2: Page by Page
         let currentMarkdown = ''; // Keep track locally to pass context
-        
-        for (let i = 1; i <= metadata.numPages; i++) {
-            setConversionStatus(`Converting page ${i} of ${metadata.numPages}...`);
+
+        for (let i = 1; i <= numPages; i++) {
+            setConversionStatus(`Converting page ${i} of ${numPages}...`);
             setCurrentPage(i); // Sync view
-            
-            const imageBase64 = await renderPageToImage(pdfDoc, i);
+
+            const imageBase64 = await pdfService.renderPage(i);
             const conversionResult = await gemini.convertPage(imageBase64, {
                 previousContent: currentMarkdown,
                 pageNumber: i,
-                totalPages: metadata.numPages
+                totalPages: numPages
             });
             let pageContent = conversionResult.content;
             const images = conversionResult.images;
-            
+
             console.log(`[Page ${i}] Generated Markdown (Pre-replace):`, pageContent);
             console.log(`[Page ${i}] Generated Images Map:`, images);
 
@@ -153,7 +170,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                             continue;
                         }
 
-                        const croppedDataUrl = await cropImageFromCanvas(imageBase64, bbox);
+                        const croppedDataUrl = await pdfService.cropImage(imageBase64, { bbox });
                         if (!croppedDataUrl) {
                             console.warn(`[Page ${i}] Cropped image is empty for ${placeholder}`);
                             continue;
@@ -172,7 +189,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
 
             // Fallback for unreplaced placeholders
             pageContent = pageContent.replace(
-                /!\[(.*?)\]\((img_placeholder_[a-zA-Z0-9_]+)\)/g, 
+                /!\[(.*?)\]\((img_placeholder_[a-zA-Z0-9_]+)\)/g,
                 '> *[Image extraction failed or coordinates missing for: $1]*'
             );
 
@@ -183,7 +200,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             if (pageContent.includes(']()')) {
                  console.warn(`[Page ${i}] Markdown contains empty image sources:`, pageContent.match(/!\[.*?\]\(\)/g));
             }
-            
+
             currentMarkdown += pageContent + '\n\n';
             setMarkdown((prev) => prev + pageContent + '\n\n');
         }
@@ -236,7 +253,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
               {filePath.split('/').pop()}
             </span>
             <span className="text-xs text-zinc-500">
-                {metadata ? `${metadata.numPages} pages` : 'Loading...'}
+                {metadata ? `${metadata.pageCount} pages` : 'Loading...'}
             </span>
           </div>
         </div>
@@ -320,7 +337,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                         Page {currentPage} / {metadata?.numPages || '-'}
                     </span>
                     <button 
-                        disabled={!metadata || currentPage >= metadata.numPages}
+                        disabled={!metadata || currentPage >= metadata.pageCount}
                         onClick={() => setCurrentPage(p => p + 1)}
                         className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded text-sm"
                     >

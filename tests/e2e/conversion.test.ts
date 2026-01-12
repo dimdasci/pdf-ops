@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { loadFixture, type Fixture } from '../utils/fixture-loader';
-import { loadPdfNode, renderPageToImageNode, cropImageNode } from '../utils/pdf-renderer';
+import { createPdfService, type PdfService } from '../../src/lib/pdf-service';
 import { convertPdfToMarkdown, type ConversionResult } from '../../src/lib/converter';
 import { parseMarkdown, type ParsedMarkdown } from '../utils/markdown-parser';
 import { validateStructure } from '../utils/structure-validator';
@@ -10,6 +10,7 @@ import { validateFormat } from '../utils/format-validator';
 describe('PDF to Markdown Conversion', () => {
   describe('arxiv-roadmap (4 pages)', () => {
     let fixture: Fixture;
+    let pdfService: PdfService;
     let result: ConversionResult;
     let parsed: ParsedMarkdown;
 
@@ -17,15 +18,15 @@ describe('PDF to Markdown Conversion', () => {
       // 1. Load fixture (PDF + expected.json)
       fixture = await loadFixture('arxiv-roadmap');
 
-      // 2. Run full conversion pipeline
-      const pdf = await loadPdfNode(fixture.pdfBuffer);
-      result = await convertPdfToMarkdown(pdf, fixture.expected.metadata.pageCount, {
+      // 2. Create PDF service for Node.js environment
+      pdfService = await createPdfService(fixture.pdfBuffer, 'node');
+
+      // 3. Run full conversion pipeline
+      result = await convertPdfToMarkdown(pdfService, {
         apiKey: process.env.GEMINI_API_KEY!,
-        renderPageToImage: renderPageToImageNode,
-        cropImage: cropImageNode,
       });
 
-      // 3. Parse resulting markdown
+      // 4. Parse resulting markdown
       parsed = parseMarkdown(result.markdown);
 
       // Debug output
@@ -37,6 +38,10 @@ describe('PDF to Markdown Conversion', () => {
       console.log('Code blocks found:', parsed.codeBlocks.length);
       console.log('\n--- Markdown Preview (first 2000 chars) ---');
       console.log(result.markdown.substring(0, 2000));
+    });
+
+    afterAll(() => {
+      pdfService?.destroy();
     });
 
     it('validates document structure', () => {
@@ -108,6 +113,7 @@ describe('PDF to Markdown Conversion', () => {
 
   describe('arxiv-guidelines (10 pages)', () => {
     let fixture: Fixture;
+    let pdfService: PdfService;
     let result: ConversionResult;
     let parsed: ParsedMarkdown;
 
@@ -115,15 +121,15 @@ describe('PDF to Markdown Conversion', () => {
       // 1. Load fixture
       fixture = await loadFixture('arxiv-guidelines');
 
-      // 2. Run full conversion pipeline
-      const pdf = await loadPdfNode(fixture.pdfBuffer);
-      result = await convertPdfToMarkdown(pdf, fixture.expected.metadata.pageCount, {
+      // 2. Create PDF service for Node.js environment
+      pdfService = await createPdfService(fixture.pdfBuffer, 'node');
+
+      // 3. Run full conversion pipeline
+      result = await convertPdfToMarkdown(pdfService, {
         apiKey: process.env.GEMINI_API_KEY!,
-        renderPageToImage: renderPageToImageNode,
-        cropImage: cropImageNode,
       });
 
-      // 3. Parse resulting markdown
+      // 4. Parse resulting markdown
       parsed = parseMarkdown(result.markdown);
 
       // Debug output
@@ -133,6 +139,10 @@ describe('PDF to Markdown Conversion', () => {
       console.log('Images found:', parsed.images.length);
       console.log('Tables found:', parsed.tables.length);
       console.log('Code blocks found:', parsed.codeBlocks.length);
+    });
+
+    afterAll(() => {
+      pdfService?.destroy();
     });
 
     it('validates document structure', () => {
