@@ -28,3 +28,7 @@ dist-ssr
 # test helper data
 chunks/
 analysis-progress.md
+
+# Environment variables
+.env
+.env.local

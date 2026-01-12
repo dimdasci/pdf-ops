@@ -1,21 +1,49 @@
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { createCanvas, loadImage, Canvas } from 'canvas';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { createCanvas, loadImage } from 'canvas';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Configure PDF.js for Node.js
-// Disable worker in Node.js environment
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+// Configure PDF.js for Node.js - set worker path
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+GlobalWorkerOptions.workerSrc = path.join(
+  __dirname,
+  '../../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'
+);
+
+// Custom canvas factory for node-canvas
+class NodeCanvasFactory {
+  create(width: number, height: number) {
+    const canvas = createCanvas(width, height);
+    const context = canvas.getContext('2d');
+    return { canvas, context };
+  }
+
+  reset(canvasAndContext: { canvas: ReturnType<typeof createCanvas>; context: ReturnType<ReturnType<typeof createCanvas>['getContext']> }, width: number, height: number) {
+    canvasAndContext.canvas.width = width;
+    canvasAndContext.canvas.height = height;
+  }
+
+  destroy(canvasAndContext: { canvas: ReturnType<typeof createCanvas> }) {
+    canvasAndContext.canvas.width = 0;
+    canvasAndContext.canvas.height = 0;
+  }
+}
 
 /**
  * Load a PDF document from a buffer in Node.js
  */
 export async function loadPdfNode(buffer: Uint8Array): Promise<PDFDocumentProxy> {
-  const loadingTask = pdfjsLib.getDocument({
+  const loadingTask = getDocument({
     data: buffer,
     useSystemFonts: true,
-    isEvalSupported: false,
-    useWorkerFetch: false,
-    disableFontFace: true,
+    standardFontDataUrl: path.join(
+      __dirname,
+      '../../node_modules/pdfjs-dist/standard_fonts/'
+    ),
+    cMapUrl: path.join(__dirname, '../../node_modules/pdfjs-dist/cmaps/'),
+    cMapPacked: true,
+    canvasFactory: new NodeCanvasFactory(),
   });
   return loadingTask.promise;
 }
@@ -32,13 +60,14 @@ export async function renderPageToImageNode(
   const viewport = page.getViewport({ scale });
 
   // Create a canvas using node-canvas
-  const canvas = createCanvas(viewport.width, viewport.height) as unknown as Canvas;
+  const canvas = createCanvas(viewport.width, viewport.height);
   const context = canvas.getContext('2d');
 
-  // Render the page
+  // Render the page with custom canvas factory
   await page.render({
     canvasContext: context as unknown as CanvasRenderingContext2D,
     viewport,
+    canvasFactory: new NodeCanvasFactory(),
   }).promise;
 
   // Convert to base64 (without data URL prefix for Gemini)
