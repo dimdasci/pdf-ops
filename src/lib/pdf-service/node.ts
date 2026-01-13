@@ -18,7 +18,9 @@ import type {
   RenderOptions,
   CropOptions,
   EmbeddedImage,
+  VectorRegion,
 } from './types';
+import { detectVectorRegionsFromOpList } from './vector-detector';
 
 // Configure PDF.js worker path for Node.js
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -288,5 +290,72 @@ export class NodePdfService implements PdfService {
     }
 
     return images;
+  }
+
+  // Vector graphics detection
+
+  async detectVectorRegions(pageNum: number): Promise<VectorRegion[]> {
+    const pdf = this.ensureLoaded();
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.0 });
+
+    // Get the operator list
+    const operatorList = await page.getOperatorList();
+
+    // Detect vector regions
+    return detectVectorRegionsFromOpList(
+      operatorList.fnArray,
+      operatorList.argsArray,
+      {
+        width: viewport.width,
+        height: viewport.height,
+        scale: 1.0,
+        transform: viewport.transform,
+      }
+    );
+  }
+
+  async renderRegion(
+    pageNum: number,
+    region: VectorRegion,
+    scale: number = 3
+  ): Promise<string> {
+    const pdf = this.ensureLoaded();
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+
+    // Render full page
+    const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+    const context = canvas.getContext('2d');
+
+    await page.render({
+      canvasContext: context as unknown as CanvasRenderingContext2D,
+      viewport,
+      canvasFactory: this.canvasFactory,
+    }).promise;
+
+    // Crop to region
+    const [x, y, width, height] = region.bbox;
+    const cropCanvas = createCanvas(
+      Math.floor(width * scale),
+      Math.floor(height * scale)
+    );
+    const cropContext = cropCanvas.getContext('2d');
+
+    cropContext.drawImage(
+      canvas as unknown as CanvasImageSource,
+      x * scale,
+      y * scale,
+      width * scale,
+      height * scale,
+      0,
+      0,
+      width * scale,
+      height * scale
+    );
+
+    // Return base64
+    const dataUrl = cropCanvas.toDataURL('image/png');
+    return dataUrl.split(',')[1];
   }
 }

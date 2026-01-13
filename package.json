@@ -16,10 +16,12 @@
     "test:e2e:watch": "vitest --config tests/vitest.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
     "@google/generative-ai": "^0.24.1",
     "@tailwindcss/typography": "^0.5.19",
     "autoprefixer": "^10.4.23",
     "clsx": "^2.1.1",
+    "effect": "^3.19.14",
     "electron-squirrel-startup": "^1.0.1",
     "framer-motion": "^12.23.26",
     "keytar": "^7.9.0",
@@ -36,13 +38,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@napi-rs/canvas": "^0.1.88",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@types/string-similarity": "^4.0.2",
     "@vitejs/plugin-react": "^5.1.1",
-    "@napi-rs/canvas": "^0.1.88",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",

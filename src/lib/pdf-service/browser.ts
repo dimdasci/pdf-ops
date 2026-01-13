@@ -15,7 +15,9 @@ import type {
   RenderOptions,
   CropOptions,
   EmbeddedImage,
+  VectorRegion,
 } from './types';
+import { detectVectorRegionsFromOpList } from './vector-detector';
 
 // Set worker source for browser (Vite URL import)
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -262,5 +264,134 @@ export class BrowserPdfService implements PdfService {
     }
 
     return images;
+  }
+
+  // Vector graphics detection
+
+  async detectVectorRegions(pageNum: number): Promise<VectorRegion[]> {
+    const pdf = this.ensureLoaded();
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.0 });
+
+    // Get the operator list
+    const operatorList = await page.getOperatorList();
+
+    // Detect vector regions
+    return detectVectorRegionsFromOpList(
+      operatorList.fnArray,
+      operatorList.argsArray,
+      {
+        width: viewport.width,
+        height: viewport.height,
+        scale: 1.0,
+        transform: viewport.transform,
+      }
+    );
+  }
+
+  async renderAsSvg(pageNum: number, region?: VectorRegion): Promise<string> {
+    const pdf = this.ensureLoaded();
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.0 });
+
+    // Create SVG container
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+
+    if (region) {
+      const [x, y, width, height] = region.bbox;
+      svg.setAttribute('viewBox', `${x} ${y} ${width} ${height}`);
+      svg.setAttribute('width', String(width));
+      svg.setAttribute('height', String(height));
+    } else {
+      svg.setAttribute('viewBox', `0 0 ${viewport.width} ${viewport.height}`);
+      svg.setAttribute('width', String(viewport.width));
+      svg.setAttribute('height', String(viewport.height));
+    }
+
+    // Render to canvas first, then convert to image in SVG
+    // (Full SVGGraphics would require more complex implementation)
+    const scale = 2; // Higher quality
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width * scale;
+    canvas.height = viewport.height * scale;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not get canvas context');
+    }
+
+    await page.render({
+      canvasContext: context,
+      viewport: page.getViewport({ scale }),
+      canvas,
+    }).promise;
+
+    // Convert to data URL
+    const dataUrl = canvas.toDataURL('image/png');
+
+    // Create image element in SVG
+    const image = document.createElementNS(svgNs, 'image');
+    image.setAttribute('href', dataUrl);
+    image.setAttribute('width', String(viewport.width));
+    image.setAttribute('height', String(viewport.height));
+    svg.appendChild(image);
+
+    // Serialize SVG
+    const serializer = new XMLSerializer();
+    return serializer.serializeToString(svg);
+  }
+
+  async renderRegion(
+    pageNum: number,
+    region: VectorRegion,
+    scale: number = 3
+  ): Promise<string> {
+    const pdf = this.ensureLoaded();
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+
+    // Render full page
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not get canvas context');
+    }
+
+    await page.render({
+      canvasContext: context,
+      viewport,
+      canvas,
+    }).promise;
+
+    // Crop to region
+    const [x, y, width, height] = region.bbox;
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = Math.floor(width * scale);
+    cropCanvas.height = Math.floor(height * scale);
+
+    const cropContext = cropCanvas.getContext('2d');
+    if (!cropContext) {
+      throw new Error('Could not get crop canvas context');
+    }
+
+    cropContext.drawImage(
+      canvas,
+      x * scale,
+      y * scale,
+      width * scale,
+      height * scale,
+      0,
+      0,
+      width * scale,
+      height * scale
+    );
+
+    // Return base64
+    const dataUrl = cropCanvas.toDataURL('image/png');
+    return dataUrl.split(',')[1];
   }
 }

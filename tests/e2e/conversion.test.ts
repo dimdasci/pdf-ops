@@ -1,11 +1,43 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { loadFixture, type Fixture } from '../utils/fixture-loader';
 import { createPdfService, type PdfService } from '../../src/lib/pdf-service';
-import { convertPdfToMarkdown, type ConversionResult } from '../../src/lib/converter';
 import { parseMarkdown, type ParsedMarkdown } from '../utils/markdown-parser';
 import { validateStructure } from '../utils/structure-validator';
 import { validateContent } from '../utils/content-validator';
 import { validateFormat } from '../utils/format-validator';
+
+// New pipeline imports
+import { convertDocument, type ConversionResult } from '../../src/lib/pipeline';
+import { GeminiProvider } from '../../src/lib/llm/gemini-provider';
+import { ClaudeProvider } from '../../src/lib/llm/claude-provider';
+import type { LLMProvider } from '../../src/lib/llm/types';
+
+// Create provider once for all tests
+let provider: LLMProvider;
+let providerName: string;
+
+beforeAll(() => {
+  // Select provider based on PROVIDER env var (default: gemini)
+  const selectedProvider = process.env.PROVIDER?.toLowerCase() || 'gemini';
+
+  if (selectedProvider === 'claude') {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error('ANTHROPIC_API_KEY environment variable is required for Claude provider');
+    }
+    provider = new ClaudeProvider({ apiKey });
+    providerName = 'Claude';
+    console.log('\n🤖 Using Claude provider (native PDF support)\n');
+  } else {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is required for Gemini provider');
+    }
+    provider = new GeminiProvider(apiKey);
+    providerName = 'Gemini';
+    console.log('\n🤖 Using Gemini provider (image-based)\n');
+  }
+});
 
 describe('PDF to Markdown Conversion', () => {
   describe('arxiv-roadmap (4 pages)', () => {
@@ -21,16 +53,21 @@ describe('PDF to Markdown Conversion', () => {
       // 2. Create PDF service for Node.js environment
       pdfService = await createPdfService(fixture.pdfBuffer, 'node');
 
-      // 3. Run full conversion pipeline
-      result = await convertPdfToMarkdown(pdfService, {
-        apiKey: process.env.GEMINI_API_KEY!,
+      // 3. Run new pipeline conversion
+      result = await convertDocument(pdfService, provider, {
+        onProgress: (status, current, total) => {
+          console.log(`[arxiv-roadmap] ${status} (${current}/${total})`);
+        },
       });
 
       // 4. Parse resulting markdown
       parsed = parseMarkdown(result.markdown);
 
       // Debug output
-      console.log('\n--- Conversion Result ---');
+      console.log(`\n--- Conversion Result (${providerName}) ---`);
+      console.log('Provider:', providerName);
+      console.log('Pipeline used:', result.metadata.pipeline);
+      console.log('Complexity:', result.metadata.complexity);
       console.log('Markdown length:', result.markdown.length);
       console.log('Headings found:', parsed.headings.length);
       console.log('Images found:', parsed.images.length);
@@ -38,7 +75,7 @@ describe('PDF to Markdown Conversion', () => {
       console.log('Code blocks found:', parsed.codeBlocks.length);
       console.log('\n--- Markdown Preview (first 2000 chars) ---');
       console.log(result.markdown.substring(0, 2000));
-    });
+    }, 180000); // 3 minute timeout
 
     afterAll(() => {
       pdfService?.destroy();
@@ -124,9 +161,11 @@ describe('PDF to Markdown Conversion', () => {
       // 2. Create PDF service for Node.js environment
       pdfService = await createPdfService(fixture.pdfBuffer, 'node');
 
-      // 3. Run full conversion pipeline
-      result = await convertPdfToMarkdown(pdfService, {
-        apiKey: process.env.GEMINI_API_KEY!,
+      // 3. Run new pipeline conversion
+      result = await convertDocument(pdfService, provider, {
+        onProgress: (status, current, total) => {
+          console.log(`[arxiv-guidelines] ${status} (${current}/${total})`);
+        },
       });
 
       // 4. Parse resulting markdown
@@ -134,12 +173,14 @@ describe('PDF to Markdown Conversion', () => {
 
       // Debug output
       console.log('\n--- Conversion Result (arxiv-guidelines) ---');
+      console.log('Pipeline used:', result.metadata.pipeline);
+      console.log('Complexity:', result.metadata.complexity);
       console.log('Markdown length:', result.markdown.length);
       console.log('Headings found:', parsed.headings.length);
       console.log('Images found:', parsed.images.length);
       console.log('Tables found:', parsed.tables.length);
       console.log('Code blocks found:', parsed.codeBlocks.length);
-    });
+    }, 300000); // 5 minute timeout
 
     afterAll(() => {
       pdfService?.destroy();
@@ -212,9 +253,11 @@ describe('PDF to Markdown Conversion', () => {
       // 2. Create PDF service for Node.js environment
       pdfService = await createPdfService(fixture.pdfBuffer, 'node');
 
-      // 3. Run full conversion pipeline
-      result = await convertPdfToMarkdown(pdfService, {
-        apiKey: process.env.GEMINI_API_KEY!,
+      // 3. Run new pipeline conversion
+      result = await convertDocument(pdfService, provider, {
+        onProgress: (status, current, total) => {
+          console.log(`[kindle-manual] ${status} (${current}/${total})`);
+        },
       });
 
       // 4. Parse resulting markdown
@@ -222,6 +265,8 @@ describe('PDF to Markdown Conversion', () => {
 
       // Debug output
       console.log('\n--- Conversion Result (kindle-manual) ---');
+      console.log('Pipeline used:', result.metadata.pipeline);
+      console.log('Complexity:', result.metadata.complexity);
       console.log('Markdown length:', result.markdown.length);
       console.log('Headings found:', parsed.headings.length);
       console.log('Images found:', parsed.images.length);

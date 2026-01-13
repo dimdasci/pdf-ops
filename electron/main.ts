@@ -58,34 +58,73 @@ app.on('window-all-closed', () => {
 
 // --- IPC Handlers ---
 
-ipcMain.handle('save-api-key', async (event, key: string) => {
+// API Keys structure
+interface ApiKeys {
+  gemini?: string;
+  anthropic?: string;
+}
+
+const getConfigPath = () => path.join(app.getPath('userData'), 'config.enc');
+
+const loadApiKeys = (): ApiKeys => {
+  try {
+    const configPath = getConfigPath();
+    if (fs.existsSync(configPath)) {
+      const encrypted = fs.readFileSync(configPath);
+      if (safeStorage.isEncryptionAvailable()) {
+        const decrypted = safeStorage.decryptString(encrypted);
+        return JSON.parse(decrypted);
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load API keys', e);
+  }
+  return {};
+};
+
+const saveApiKeys = (keys: ApiKeys): boolean => {
   if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = safeStorage.encryptString(key);
-    // In a real app, store this in a file or system keychain.
-    // For this prototype, we'll store it in a local config file in userData.
-    const configPath = path.join(app.getPath('userData'), 'config.enc');
+    const encrypted = safeStorage.encryptString(JSON.stringify(keys));
+    const configPath = getConfigPath();
     fs.writeFileSync(configPath, encrypted);
     return true;
-  } else {
-    // Fallback or error if encryption not available
-    console.warn('SafeStorage not available, cannot save key securely.');
-    return false;
   }
+  console.warn('SafeStorage not available, cannot save keys securely.');
+  return false;
+};
+
+// Legacy handler for backward compatibility
+ipcMain.handle('save-api-key', async (_event, key: string) => {
+  const keys = loadApiKeys();
+  keys.gemini = key;
+  return saveApiKeys(keys);
 });
 
 ipcMain.handle('get-api-key', async () => {
-  try {
-     const configPath = path.join(app.getPath('userData'), 'config.enc');
-     if (fs.existsSync(configPath)) {
-       const encrypted = fs.readFileSync(configPath);
-       if (safeStorage.isEncryptionAvailable()) {
-         return safeStorage.decryptString(encrypted);
-       }
-     }
-  } catch (e) {
-    console.error('Failed to retrieve API key', e);
-  }
-  return null;
+  const keys = loadApiKeys();
+  return keys.gemini || null;
+});
+
+// New handlers for multiple providers
+ipcMain.handle('save-api-keys', async (_event, keys: ApiKeys) => {
+  const existing = loadApiKeys();
+  const merged = { ...existing, ...keys };
+  return saveApiKeys(merged);
+});
+
+ipcMain.handle('get-api-keys', async () => {
+  return loadApiKeys();
+});
+
+ipcMain.handle('save-provider-key', async (_event, provider: string, key: string) => {
+  const keys = loadApiKeys();
+  (keys as Record<string, string>)[provider] = key;
+  return saveApiKeys(keys);
+});
+
+ipcMain.handle('get-provider-key', async (_event, provider: string) => {
+  const keys = loadApiKeys();
+  return (keys as Record<string, string>)[provider] || null;
 });
 
 // File System handlers

@@ -48,6 +48,38 @@ export interface CropOptions {
 }
 
 /**
+ * Vector graphic region detected in a PDF page.
+ */
+export interface VectorRegion {
+  /** Bounding box in page coordinates: [x, y, width, height] */
+  bbox: [number, number, number, number];
+  /** Number of path operations in this region */
+  pathCount: number;
+  /** Whether the region contains stroked paths */
+  hasStroke: boolean;
+  /** Whether the region contains filled paths */
+  hasFill: boolean;
+  /** Estimated complexity score (0-1) */
+  complexity: number;
+  /** Region type hint */
+  type: 'diagram' | 'chart' | 'logo' | 'decoration' | 'unknown';
+}
+
+/**
+ * Classification of a vector graphic.
+ */
+export interface GraphicClassification {
+  /** Whether this is primarily vector content */
+  isPureVector: boolean;
+  /** Complexity estimate (0-1) */
+  complexity: number;
+  /** Whether this should be extracted */
+  shouldExtract: boolean;
+  /** Description for alt text */
+  description?: string;
+}
+
+/**
  * Unified PDF Service Interface
  *
  * Provides a consistent API for PDF operations across different environments.
@@ -119,4 +151,30 @@ export interface PdfService {
    * @returns Array of embedded images with their data and dimensions
    */
   getPageImages(pageNum: number): Promise<EmbeddedImage[]>;
+
+  // Vector graphics detection (optional)
+
+  /**
+   * Detect vector graphic regions on a page.
+   * @param pageNum - 1-indexed page number
+   * @returns Array of detected vector regions
+   */
+  detectVectorRegions?(pageNum: number): Promise<VectorRegion[]>;
+
+  /**
+   * Render a page or region as SVG.
+   * @param pageNum - 1-indexed page number
+   * @param region - Optional region to extract (full page if not specified)
+   * @returns SVG string
+   */
+  renderAsSvg?(pageNum: number, region?: VectorRegion): Promise<string>;
+
+  /**
+   * Render a specific region at high resolution for classification.
+   * @param pageNum - 1-indexed page number
+   * @param region - Region to render
+   * @param scale - Scale factor (default: 3)
+   * @returns Base64-encoded PNG
+   */
+  renderRegion?(pageNum: number, region: VectorRegion, scale?: number): Promise<string>;
 }
