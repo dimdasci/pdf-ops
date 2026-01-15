@@ -37,6 +37,7 @@ Extract `pages` from JSON output.
 - **>10 pages:** Use Large PDF Workflow (see below)
 
 **Record:**
+
 ```
 PDF: [filename]
 Pages: [N]
@@ -48,16 +49,19 @@ Workflow: [standard / chunked]
 **Goal:** Understand document before detailed extraction.
 
 Read first 3-5 pages:
+
 - Document type (academic paper, manual, report, book)
 - Primary language
 - TOC presence and location (may be after title/preamble)
 - Preamble elements (title page, abstract, preface)
 
 Read last 2-3 pages:
+
 - Appendices, references, index
 - Total page count
 
 **Record findings:**
+
 ```
 Document: [filename]
 Type: [manual/paper/report/book]
@@ -81,12 +85,14 @@ TOC: [found on page X / not found]
 ### If NO TOC (Infer Structure)
 
 Scan document systematically, identify headings by:
+
 - **Font size:** Larger = higher level
 - **Formatting:** Bold, caps, underlined
 - **Numbering:** "1.", "1.1", "1.1.1" patterns
 - **Semantic markers:** "Chapter", "Section", "Part", "Appendix"
 
 Build hierarchy:
+
 - Document title = H1 (usually one)
 - Major sections = H2
 - Subsections = H3
@@ -99,17 +105,20 @@ Build hierarchy:
 Process document section by section, counting:
 
 ### Images/Figures
+
 - Photos, diagrams, charts, graphs, screenshots
 - **Include:** Numbered figures, inline illustrations
 - **Exclude:** Logos, decorative elements, page headers/footers
 
 ### Tables
+
 - Data tables with rows and columns
 - Record dimensions: rows x columns (include header row)
 - **Include:** Data tables, comparison tables
 - **Exclude:** Layout tables (used for positioning, not data)
 
 ### Code Blocks
+
 - Code snippets, command examples, file listings
 - Note language if specified (syntax highlighting, labels)
 - **Include:** Fenced/indented code blocks
@@ -168,6 +177,7 @@ Generate JSON matching ExpectedSchema (see references/expected-schema.md):
 ## Confidence Notes
 
 When generating output, note any uncertainties:
+
 - "Image count approximate - decorative elements excluded"
 - "Heading hierarchy inferred from formatting"
 - "Table dimensions estimated from visible structure"
@@ -201,6 +211,7 @@ ls <temp_dir>/*.pdf | sort -V
 ### Step 4: Process Each Chunk
 
 For each chunk file, run Passes 1-3:
+
 1. Read the chunk PDF
 2. Extract structure (headings, hierarchy)
 3. Inventory content (images, tables, code blocks)
@@ -211,6 +222,7 @@ For each chunk file, run Passes 1-3:
 ### Step 5: Aggregate Results
 
 After all chunks processed:
+
 - Combine all heading items in order
 - Sum all content counts
 - Validate hierarchy across combined headings
@@ -260,6 +272,7 @@ Running totals:
 **Split heading:** If a heading appears at chunk end but its content is in next chunk, count the heading in the chunk where the heading text appears.
 
 **Split table:** If a table spans chunks:
+
 - Count as ONE table
 - Record total rows across both chunks
 - Note in confidence: "Table spans chunk boundary"
@@ -297,6 +310,7 @@ After processing all chunks:
 ### Final Validation
 
 Before output:
+
 - Check heading hierarchy is valid (no skipped levels)
 - Verify counts are reasonable for page count
 - Note any aggregation uncertainties in Confidence Notes

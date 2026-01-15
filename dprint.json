@@ -1,0 +1,33 @@
+{
+  "$schema": "https://dprint.dev/schemas/v0.json",
+  "lineWidth": 100,
+  "indentWidth": 2,
+  "useTabs": false,
+  "newLineKind": "lf",
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.93.3.wasm",
+    "https://plugins.dprint.dev/json-0.19.4.wasm",
+    "https://plugins.dprint.dev/markdown-0.17.8.wasm"
+  ],
+  "typescript": {
+    "semiColons": "asi",
+    "quoteStyle": "preferSingle",
+    "trailingCommas": "onlyMultiLine",
+    "arrowFunction.useParentheses": "preferNone",
+    "jsx.quoteStyle": "preferDouble"
+  },
+  "includes": [
+    "src/**/*.{ts,tsx}",
+    "electron/**/*.ts",
+    "tests/**/*.ts",
+    "*.json",
+    "*.md",
+    "docs/**/*.md"
+  ],
+  "excludes": [
+    "node_modules",
+    "dist",
+    "dist-electron",
+    "package-lock.json"
+  ]
+}

@@ -1,14 +1,14 @@
-import { app, BrowserWindow, ipcMain, safeStorage, dialog } from 'electron';
-import path from 'path';
-import fs from 'fs';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
+import fs from 'fs'
+import path from 'path'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 if (require('electron-squirrel-startup')) {
-  app.quit();
+  app.quit()
 }
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow: BrowserWindow | null = null
 
 const createWindow = () => {
   // Create the browser window.
@@ -20,126 +20,126 @@ const createWindow = () => {
       nodeIntegration: false,
       contextIsolation: true,
     },
-  });
+  })
 
   // Check if we are in dev mode
-  const isDev = process.env.NODE_ENV === 'development';
+  const isDev = process.env.NODE_ENV === 'development'
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
-};
+}
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 app.whenReady().then(() => {
-  createWindow();
+  createWindow()
 
   app.on('activate', () => {
     // On OS X it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow()
     }
-  });
-});
+  })
+})
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit();
+    app.quit()
   }
-});
+})
 
 // --- IPC Handlers ---
 
 // API Keys structure
 interface ApiKeys {
-  gemini?: string;
-  anthropic?: string;
+  gemini?: string
+  anthropic?: string
 }
 
-const getConfigPath = () => path.join(app.getPath('userData'), 'config.enc');
+const getConfigPath = () => path.join(app.getPath('userData'), 'config.enc')
 
 const loadApiKeys = (): ApiKeys => {
   try {
-    const configPath = getConfigPath();
+    const configPath = getConfigPath()
     if (fs.existsSync(configPath)) {
-      const encrypted = fs.readFileSync(configPath);
+      const encrypted = fs.readFileSync(configPath)
       if (safeStorage.isEncryptionAvailable()) {
-        const decrypted = safeStorage.decryptString(encrypted);
-        return JSON.parse(decrypted);
+        const decrypted = safeStorage.decryptString(encrypted)
+        return JSON.parse(decrypted)
       }
     }
   } catch (e) {
-    console.error('Failed to load API keys', e);
+    console.error('Failed to load API keys', e)
   }
-  return {};
-};
+  return {}
+}
 
 const saveApiKeys = (keys: ApiKeys): boolean => {
   if (safeStorage.isEncryptionAvailable()) {
-    const encrypted = safeStorage.encryptString(JSON.stringify(keys));
-    const configPath = getConfigPath();
-    fs.writeFileSync(configPath, encrypted);
-    return true;
+    const encrypted = safeStorage.encryptString(JSON.stringify(keys))
+    const configPath = getConfigPath()
+    fs.writeFileSync(configPath, encrypted)
+    return true
   }
-  console.warn('SafeStorage not available, cannot save keys securely.');
-  return false;
-};
+  console.warn('SafeStorage not available, cannot save keys securely.')
+  return false
+}
 
 // Legacy handler for backward compatibility
 ipcMain.handle('save-api-key', async (_event, key: string) => {
-  const keys = loadApiKeys();
-  keys.gemini = key;
-  return saveApiKeys(keys);
-});
+  const keys = loadApiKeys()
+  keys.gemini = key
+  return saveApiKeys(keys)
+})
 
 ipcMain.handle('get-api-key', async () => {
-  const keys = loadApiKeys();
-  return keys.gemini || null;
-});
+  const keys = loadApiKeys()
+  return keys.gemini || null
+})
 
 // New handlers for multiple providers
 ipcMain.handle('save-api-keys', async (_event, keys: ApiKeys) => {
-  const existing = loadApiKeys();
-  const merged = { ...existing, ...keys };
-  return saveApiKeys(merged);
-});
+  const existing = loadApiKeys()
+  const merged = { ...existing, ...keys }
+  return saveApiKeys(merged)
+})
 
 ipcMain.handle('get-api-keys', async () => {
-  return loadApiKeys();
-});
+  return loadApiKeys()
+})
 
 ipcMain.handle('save-provider-key', async (_event, provider: string, key: string) => {
-  const keys = loadApiKeys();
-  (keys as Record<string, string>)[provider] = key;
-  return saveApiKeys(keys);
-});
+  const keys = loadApiKeys()
+  ;(keys as Record<string, string>)[provider] = key
+  return saveApiKeys(keys)
+})
 
 ipcMain.handle('get-provider-key', async (_event, provider: string) => {
-  const keys = loadApiKeys();
-  return (keys as Record<string, string>)[provider] || null;
-});
+  const keys = loadApiKeys()
+  return (keys as Record<string, string>)[provider] || null
+})
 
 // File System handlers
 ipcMain.handle('read-file-buffer', async (event, filePath: string) => {
-    return fs.readFileSync(filePath);
-});
+  return fs.readFileSync(filePath)
+})
 
 ipcMain.handle('save-markdown-file', async (event, content: string) => {
-    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow!, {
-        filters: [{ name: 'Markdown', extensions: ['md'] }]
-    });
-    
-    if (!canceled && filePath) {
-        fs.writeFileSync(filePath, content);
-        return true;
-    }
-    return false;
-});
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow!, {
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+  })
+
+  if (!canceled && filePath) {
+    fs.writeFileSync(filePath, content)
+    return true
+  }
+  return false
+})

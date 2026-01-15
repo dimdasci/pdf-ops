@@ -5,7 +5,7 @@
  * and error handling for LLM API calls.
  */
 
-import { Effect, Schedule, Duration, Semaphore, Ref, pipe } from 'effect';
+import { Duration, Effect, pipe, Ref, Schedule } from 'effect'
 
 // ============================================================================
 // Types
@@ -13,56 +13,58 @@ import { Effect, Schedule, Duration, Semaphore, Ref, pipe } from 'effect';
 
 /** Error types for pipeline operations */
 export class RateLimitError extends Error {
-  readonly _tag = 'RateLimitError';
-  constructor(
-    message: string,
-    public readonly retryAfterMs?: number
-  ) {
-    super(message);
-    this.name = 'RateLimitError';
+  readonly _tag = 'RateLimitError' as const
+  readonly retryAfterMs?: number
+
+  constructor(message: string, retryAfterMs?: number) {
+    super(message)
+    this.name = 'RateLimitError'
+    this.retryAfterMs = retryAfterMs
   }
 }
 
 export class APIError extends Error {
-  readonly _tag = 'APIError';
-  constructor(
-    message: string,
-    public readonly statusCode?: number,
-    public readonly isRetryable: boolean = false
-  ) {
-    super(message);
-    this.name = 'APIError';
+  readonly _tag = 'APIError' as const
+  readonly statusCode?: number
+  readonly isRetryable: boolean
+
+  constructor(message: string, statusCode?: number, isRetryable: boolean = false) {
+    super(message)
+    this.name = 'APIError'
+    this.statusCode = statusCode
+    this.isRetryable = isRetryable
   }
 }
 
 export class TimeoutError extends Error {
-  readonly _tag = 'TimeoutError';
+  readonly _tag = 'TimeoutError' as const
+
   constructor(message: string) {
-    super(message);
-    this.name = 'TimeoutError';
+    super(message)
+    this.name = 'TimeoutError'
   }
 }
 
-export type PipelineError = RateLimitError | APIError | TimeoutError;
+export type PipelineError = RateLimitError | APIError | TimeoutError
 
 /** Configuration for retry behavior */
 export interface RetryConfig {
   /** Initial delay for exponential backoff */
-  baseDelay: Duration.DurationInput;
+  baseDelay: Duration.DurationInput
   /** Maximum delay between retries */
-  maxDelay: Duration.DurationInput;
+  maxDelay: Duration.DurationInput
   /** Maximum number of retry attempts */
-  maxAttempts: number;
+  maxAttempts: number
   /** Factor for exponential backoff (default: 2) */
-  factor?: number;
+  factor?: number
 }
 
 /** Configuration for rate limiting */
 export interface RateLimitConfig {
   /** Maximum concurrent requests */
-  concurrency: number;
+  concurrency: number
   /** Minimum delay between requests (ms) */
-  minDelayMs: number;
+  minDelayMs: number
 }
 
 /** Default configurations */
@@ -71,12 +73,12 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxDelay: '30 seconds',
   maxAttempts: 5,
   factor: 2,
-};
+}
 
 export const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
   concurrency: 3,
   minDelayMs: 200,
-};
+}
 
 // ============================================================================
 // Retry Logic
@@ -90,8 +92,8 @@ export function createRetrySchedule(config: RetryConfig = DEFAULT_RETRY_CONFIG) 
     Schedule.exponential(config.baseDelay, config.factor ?? 2),
     Schedule.either(Schedule.spaced(config.maxDelay)),
     Schedule.upTo(config.maxDelay),
-    Schedule.intersect(Schedule.recurs(config.maxAttempts))
-  );
+    Schedule.intersect(Schedule.recurs(config.maxAttempts)),
+  )
 }
 
 /**
@@ -99,24 +101,24 @@ export function createRetrySchedule(config: RetryConfig = DEFAULT_RETRY_CONFIG) 
  */
 export function isRetryableError(error: unknown): boolean {
   if (error instanceof RateLimitError) {
-    return true;
+    return true
   }
   if (error instanceof APIError) {
-    return error.isRetryable;
+    return error.isRetryable
   }
   if (error instanceof Error) {
-    const message = error.message.toLowerCase();
+    const message = error.message.toLowerCase()
     // Common retryable error patterns
     return (
-      message.includes('rate limit') ||
-      message.includes('429') ||
-      message.includes('503') ||
-      message.includes('timeout') ||
-      message.includes('econnreset') ||
-      message.includes('network')
-    );
+      message.includes('rate limit')
+      || message.includes('429')
+      || message.includes('503')
+      || message.includes('timeout')
+      || message.includes('econnreset')
+      || message.includes('network')
+    )
   }
-  return false;
+  return false
 }
 
 /**
@@ -124,53 +126,55 @@ export function isRetryableError(error: unknown): boolean {
  */
 export function withRetry<A>(
   operation: () => Promise<A>,
-  config: RetryConfig = DEFAULT_RETRY_CONFIG
+  config: RetryConfig = DEFAULT_RETRY_CONFIG,
 ): Effect.Effect<A, PipelineError> {
-  const schedule = createRetrySchedule(config);
+  const schedule = createRetrySchedule(config)
 
   return pipe(
     Effect.tryPromise({
       try: operation,
-      catch: (error) => classifyError(error),
+      catch: error => classifyError(error),
     }),
     Effect.retry({
       schedule,
-      while: (error) => isRetryableError(error),
-    })
-  );
+      while: error => isRetryableError(error),
+    }),
+  )
 }
 
 /**
  * Classify an error into a PipelineError type.
  */
 export function classifyError(error: unknown): PipelineError {
-  if (error instanceof RateLimitError || error instanceof APIError || error instanceof TimeoutError) {
-    return error;
+  if (
+    error instanceof RateLimitError || error instanceof APIError || error instanceof TimeoutError
+  ) {
+    return error
   }
 
   if (error instanceof Error) {
-    const message = error.message.toLowerCase();
+    const message = error.message.toLowerCase()
 
     if (message.includes('rate limit') || message.includes('429')) {
-      return new RateLimitError(error.message);
+      return new RateLimitError(error.message)
     }
 
     if (message.includes('timeout')) {
-      return new TimeoutError(error.message);
+      return new TimeoutError(error.message)
     }
 
     // Check for HTTP status codes
-    const statusMatch = message.match(/status[:\s]*(\d{3})/i);
+    const statusMatch = message.match(/status[:\s]*(\d{3})/i)
     if (statusMatch) {
-      const status = parseInt(statusMatch[1], 10);
-      const isRetryable = status === 429 || status >= 500;
-      return new APIError(error.message, status, isRetryable);
+      const status = parseInt(statusMatch[1], 10)
+      const isRetryable = status === 429 || status >= 500
+      return new APIError(error.message, status, isRetryable)
     }
 
-    return new APIError(error.message, undefined, isRetryableError(error));
+    return new APIError(error.message, undefined, isRetryableError(error))
   }
 
-  return new APIError(String(error));
+  return new APIError(String(error))
 }
 
 // ============================================================================
@@ -182,58 +186,58 @@ export function classifyError(error: unknown): PipelineError {
  */
 export interface RateLimiter {
   /** Execute an effect with rate limiting */
-  withRateLimit: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
+  withRateLimit: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>
   /** Get current concurrent count */
-  getConcurrentCount: () => Effect.Effect<number>;
+  getConcurrentCount: () => Effect.Effect<number>
 }
 
 /**
  * Create a rate limiter with concurrency and delay controls.
  */
 export function createRateLimiter(
-  config: RateLimitConfig = DEFAULT_RATE_LIMIT_CONFIG
+  config: RateLimitConfig = DEFAULT_RATE_LIMIT_CONFIG,
 ): Effect.Effect<RateLimiter, never> {
-  return Effect.gen(function* () {
-    const semaphore = yield* Effect.makeSemaphore(config.concurrency);
-    const lastCallTime = yield* Ref.make(0);
-    const concurrentCount = yield* Ref.make(0);
+  return Effect.gen(function*() {
+    const semaphore = yield* Effect.makeSemaphore(config.concurrency)
+    const lastCallTime = yield* Ref.make(0)
+    const concurrentCount = yield* Ref.make(0)
 
     const withRateLimit = <A, E>(
-      effect: Effect.Effect<A, E>
+      effect: Effect.Effect<A, E>,
     ): Effect.Effect<A, E> =>
-      Effect.gen(function* () {
+      Effect.gen(function*() {
         // Wait for semaphore permit
-        yield* Ref.update(concurrentCount, (n) => n + 1);
+        yield* Ref.update(concurrentCount, n => n + 1)
 
         try {
           // Enforce minimum delay between requests
-          const now = Date.now();
-          const lastTime = yield* Ref.get(lastCallTime);
-          const elapsed = now - lastTime;
+          const now = Date.now()
+          const lastTime = yield* Ref.get(lastCallTime)
+          const elapsed = now - lastTime
 
           if (elapsed < config.minDelayMs) {
-            yield* Effect.sleep(Duration.millis(config.minDelayMs - elapsed));
+            yield* Effect.sleep(Duration.millis(config.minDelayMs - elapsed))
           }
 
           // Execute with permit
-          const result = yield* semaphore.withPermits(1)(effect);
+          const result = yield* semaphore.withPermits(1)(effect)
 
           // Update last call time
-          yield* Ref.set(lastCallTime, Date.now());
+          yield* Ref.set(lastCallTime, Date.now())
 
-          return result;
+          return result
         } finally {
-          yield* Ref.update(concurrentCount, (n) => n - 1);
+          yield* Ref.update(concurrentCount, n => n - 1)
         }
-      });
+      })
 
-    const getConcurrentCount = () => Ref.get(concurrentCount);
+    const getConcurrentCount = () => Ref.get(concurrentCount)
 
     return {
       withRateLimit,
       getConcurrentCount,
-    };
-  });
+    }
+  })
 }
 
 // ============================================================================
@@ -246,18 +250,18 @@ export function createRateLimiter(
 export function withRobustness<A>(
   operation: () => Promise<A>,
   options: {
-    retryConfig?: RetryConfig;
-    rateLimiter?: RateLimiter;
-    timeout?: Duration.DurationInput;
-  } = {}
+    retryConfig?: RetryConfig
+    rateLimiter?: RateLimiter
+    timeout?: Duration.DurationInput
+  } = {},
 ): Effect.Effect<A, PipelineError> {
   const {
     retryConfig = DEFAULT_RETRY_CONFIG,
     rateLimiter,
     timeout = '60 seconds',
-  } = options;
+  } = options
 
-  let effect = withRetry(operation, retryConfig);
+  let effect = withRetry(operation, retryConfig)
 
   // Add timeout
   effect = pipe(
@@ -265,22 +269,22 @@ export function withRobustness<A>(
     Effect.timeoutFail({
       duration: timeout,
       onTimeout: () => new TimeoutError(`Operation timed out after ${timeout}`),
-    })
-  );
+    }),
+  )
 
   // Add rate limiting if provided
   if (rateLimiter) {
-    effect = rateLimiter.withRateLimit(effect);
+    effect = rateLimiter.withRateLimit(effect)
   }
 
-  return effect;
+  return effect
 }
 
 /**
  * Run an Effect and convert to Promise (for integration with existing code).
  */
 export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
-  return Effect.runPromise(effect as Effect.Effect<A, never>);
+  return Effect.runPromise(effect as Effect.Effect<A, never>)
 }
 
 /**
@@ -290,43 +294,43 @@ export function processWithConcurrency<T, R>(
   items: T[],
   processor: (item: T, index: number) => Promise<R>,
   options: {
-    concurrency?: number;
-    retryConfig?: RetryConfig;
-    onProgress?: (completed: number, total: number) => void;
-  } = {}
+    concurrency?: number
+    retryConfig?: RetryConfig
+    onProgress?: (completed: number, total: number) => void
+  } = {},
 ): Effect.Effect<R[], PipelineError> {
   const {
     concurrency = 3,
     retryConfig = DEFAULT_RETRY_CONFIG,
     onProgress,
-  } = options;
+  } = options
 
-  return Effect.gen(function* () {
-    const semaphore = yield* Effect.makeSemaphore(concurrency);
-    const completedRef = yield* Ref.make(0);
-    const total = items.length;
+  return Effect.gen(function*() {
+    const semaphore = yield* Effect.makeSemaphore(concurrency)
+    const completedRef = yield* Ref.make(0)
+    const total = items.length
 
     const processItem = (item: T, index: number): Effect.Effect<R, PipelineError> =>
       semaphore.withPermits(1)(
-        Effect.gen(function* () {
-          const result = yield* withRetry(() => processor(item, index), retryConfig);
+        Effect.gen(function*() {
+          const result = yield* withRetry(() => processor(item, index), retryConfig)
 
           // Update progress
-          const completed = yield* Ref.updateAndGet(completedRef, (n) => n + 1);
-          onProgress?.(completed, total);
+          const completed = yield* Ref.updateAndGet(completedRef, n => n + 1)
+          onProgress?.(completed, total)
 
-          return result;
-        })
-      );
+          return result
+        }),
+      )
 
     // Process all items with controlled concurrency
     const results = yield* Effect.all(
       items.map((item, index) => processItem(item, index)),
-      { concurrency: 'unbounded' } // Semaphore handles actual concurrency
-    );
+      { concurrency: 'unbounded' }, // Semaphore handles actual concurrency
+    )
 
-    return results;
-  });
+    return results
+  })
 }
 
 // ============================================================================
@@ -335,29 +339,29 @@ export function processWithConcurrency<T, R>(
 
 export interface ProgressTracker {
   /** Update progress */
-  update: (current: number, total: number, status?: string) => void;
+  update: (current: number, total: number, status?: string) => void
   /** Get current progress */
-  getProgress: () => { current: number; total: number; status: string };
+  getProgress: () => { current: number; total: number; status: string }
 }
 
 /**
  * Create a progress tracker Effect.
  */
 export function createProgressTracker(
-  onProgress?: (status: string, current: number, total: number) => void
+  onProgress?: (status: string, current: number, total: number) => void,
 ): Effect.Effect<ProgressTracker> {
-  return Effect.gen(function* () {
-    const state = yield* Ref.make({ current: 0, total: 100, status: '' });
+  return Effect.gen(function*() {
+    const state = yield* Ref.make({ current: 0, total: 100, status: '' })
 
     return {
       update: (current: number, total: number, status?: string) => {
-        const statusStr = status ?? '';
-        Ref.set(state, { current, total, status: statusStr });
-        onProgress?.(statusStr, current, total);
+        const statusStr = status ?? ''
+        Ref.set(state, { current, total, status: statusStr })
+        onProgress?.(statusStr, current, total)
       },
       getProgress: () => Effect.runSync(Ref.get(state)),
-    };
-  });
+    }
+  })
 }
 
 // ============================================================================
@@ -369,21 +373,21 @@ export function createProgressTracker(
  */
 export function sequenceWithDelay<A, E>(
   effects: Effect.Effect<A, E>[],
-  delayMs: number = 0
+  delayMs: number = 0,
 ): Effect.Effect<A[], E> {
-  return Effect.gen(function* () {
-    const results: A[] = [];
+  return Effect.gen(function*() {
+    const results: A[] = []
 
     for (let i = 0; i < effects.length; i++) {
       if (i > 0 && delayMs > 0) {
-        yield* Effect.sleep(Duration.millis(delayMs));
+        yield* Effect.sleep(Duration.millis(delayMs))
       }
-      const result = yield* effects[i];
-      results.push(result);
+      const result = yield* effects[i]
+      results.push(result)
     }
 
-    return results;
-  });
+    return results
+  })
 }
 
 /**
@@ -394,55 +398,49 @@ export function processBatches<T, R>(
   batchSize: number,
   processor: (batch: T[]) => Promise<R[]>,
   options: {
-    delayBetweenBatches?: number;
-    retryConfig?: RetryConfig;
-    onBatchComplete?: (batchNum: number, totalBatches: number) => void;
-  } = {}
+    delayBetweenBatches?: number
+    retryConfig?: RetryConfig
+    onBatchComplete?: (batchNum: number, totalBatches: number) => void
+  } = {},
 ): Effect.Effect<R[], PipelineError> {
   const {
     delayBetweenBatches = 500,
     retryConfig = DEFAULT_RETRY_CONFIG,
     onBatchComplete,
-  } = options;
+  } = options
 
-  return Effect.gen(function* () {
-    const results: R[] = [];
-    const batches: T[][] = [];
+  return Effect.gen(function*() {
+    const results: R[] = []
+    const batches: T[][] = []
 
     // Create batches
     for (let i = 0; i < items.length; i += batchSize) {
-      batches.push(items.slice(i, i + batchSize));
+      batches.push(items.slice(i, i + batchSize))
     }
 
-    const totalBatches = batches.length;
+    const totalBatches = batches.length
 
     // Process each batch
     for (let i = 0; i < batches.length; i++) {
       if (i > 0 && delayBetweenBatches > 0) {
-        yield* Effect.sleep(Duration.millis(delayBetweenBatches));
+        yield* Effect.sleep(Duration.millis(delayBetweenBatches))
       }
 
       const batchResults = yield* withRetry(
         () => processor(batches[i]),
-        retryConfig
-      );
+        retryConfig,
+      )
 
-      results.push(...batchResults);
-      onBatchComplete?.(i + 1, totalBatches);
+      results.push(...batchResults)
+      onBatchComplete?.(i + 1, totalBatches)
     }
 
-    return results;
-  });
+    return results
+  })
 }
 
 // ============================================================================
 // Exports
 // ============================================================================
 
-export {
-  Effect,
-  Schedule,
-  Duration,
-  Semaphore,
-  pipe,
-};
+export { Duration, Effect, pipe, Schedule }

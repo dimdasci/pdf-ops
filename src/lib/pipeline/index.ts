@@ -4,18 +4,18 @@
  * Provides adaptive conversion pipelines based on document complexity.
  */
 
-import type { PdfService } from '../pdf-service/types';
-import type { LLMProvider, DocumentStructure, DocumentAnalysis } from '../llm/types';
+import type { DocumentAnalysis, DocumentStructure, LLMProvider } from '../llm/types'
+import type { PdfService } from '../pdf-service/types'
 
 import {
   classifyDocumentComplexity,
+  type ComplexityLevel,
   type DocumentComplexity,
   type PipelineType,
-  type ComplexityLevel,
-} from './complexity-classifier';
-import { runDirectPipeline, type DirectPipelineResult } from './direct-pipeline';
-import { runLightPipeline, type LightPipelineResult } from './light-pipeline';
-import { runFullPipeline, type FullPipelineResult } from './full-pipeline';
+} from './complexity-classifier'
+import { type DirectPipelineResult, runDirectPipeline } from './direct-pipeline'
+import { type FullPipelineResult, runFullPipeline } from './full-pipeline'
+import { type LightPipelineResult, runLightPipeline } from './light-pipeline'
 
 // ============================================================================
 // Types
@@ -23,37 +23,37 @@ import { runFullPipeline, type FullPipelineResult } from './full-pipeline';
 
 export interface ConversionOptions {
   /** Progress callback */
-  onProgress?: (status: string, current: number, total: number) => void;
+  onProgress?: (status: string, current: number, total: number) => void
   /** Render DPI for page images */
-  dpi?: number;
+  dpi?: number
   /** Force a specific pipeline type */
-  forcePipeline?: PipelineType;
+  forcePipeline?: PipelineType
   /** Enable parallel processing for full pipeline */
-  parallel?: boolean;
+  parallel?: boolean
   /** Concurrency for parallel processing */
-  concurrency?: number;
+  concurrency?: number
 }
 
 export interface ConversionResult {
   /** Combined markdown content */
-  markdown: string;
+  markdown: string
   /** Per-page/window content */
-  contents: string[];
+  contents: string[]
   /** Conversion metadata */
   metadata: {
-    pageCount: number;
-    language: string;
-    hasTOC: boolean;
-    processingTimeMs: number;
-    pipeline: PipelineType;
-    complexity: ComplexityLevel;
-  };
+    pageCount: number
+    language: string
+    hasTOC: boolean
+    processingTimeMs: number
+    pipeline: PipelineType
+    complexity: ComplexityLevel
+  }
   /** Document structure (if extracted) */
-  structure?: DocumentStructure;
+  structure?: DocumentStructure
   /** Document analysis (if performed) */
-  analysis?: DocumentAnalysis;
+  analysis?: DocumentAnalysis
   /** Complexity assessment */
-  complexity: DocumentComplexity;
+  complexity: DocumentComplexity
 }
 
 // ============================================================================
@@ -71,70 +71,70 @@ export interface ConversionResult {
 export async function convertDocument(
   pdfService: PdfService,
   provider: LLMProvider,
-  options: ConversionOptions = {}
+  options: ConversionOptions = {},
 ): Promise<ConversionResult> {
-  const { onProgress, dpi = 150, forcePipeline, parallel, concurrency } = options;
+  const { onProgress, dpi = 150, forcePipeline, parallel, concurrency } = options
 
   // Step 1: Classify document complexity
-  onProgress?.('Analyzing document complexity...', 0, 100);
-  const complexity = await classifyDocumentComplexity(pdfService);
+  onProgress?.('Analyzing document complexity...', 0, 100)
+  const complexity = await classifyDocumentComplexity(pdfService)
 
   // Determine pipeline to use
-  const pipelineType = forcePipeline || complexity.recommendedPipeline;
+  const pipelineType = forcePipeline || complexity.recommendedPipeline
 
   onProgress?.(
     `Using ${pipelineType} pipeline (complexity: ${complexity.level}, score: ${complexity.score})`,
     5,
-    100
-  );
+    100,
+  )
 
   // Step 2: Run appropriate pipeline
-  let result: ConversionResult;
+  let result: ConversionResult
 
   switch (pipelineType) {
     case 'direct': {
       const directResult = await runDirectPipeline(pdfService, provider, {
         onProgress: (status, page, total) => {
-          const percent = 5 + Math.floor((page / total) * 90);
-          onProgress?.(status, percent, 100);
+          const percent = 5 + Math.floor((page / total) * 90)
+          onProgress?.(status, percent, 100)
         },
         dpi,
-      });
-      result = mapDirectResult(directResult, complexity);
-      break;
+      })
+      result = mapDirectResult(directResult, complexity)
+      break
     }
 
     case 'light': {
       const lightResult = await runLightPipeline(pdfService, provider, {
         onProgress: (status, page, total) => {
-          const percent = 5 + Math.floor((page / total) * 90);
-          onProgress?.(status, percent, 100);
+          const percent = 5 + Math.floor((page / total) * 90)
+          onProgress?.(status, percent, 100)
         },
         dpi,
-      });
-      result = mapLightResult(lightResult, complexity);
-      break;
+      })
+      result = mapLightResult(lightResult, complexity)
+      break
     }
 
     case 'full': {
       const fullResult = await runFullPipeline(pdfService, provider, {
         onProgress: (status, current, total) => {
-          onProgress?.(status, current, total);
+          onProgress?.(status, current, total)
         },
         dpi,
         parallel,
         concurrency,
-      });
-      result = mapFullResult(fullResult, complexity);
-      break;
+      })
+      result = mapFullResult(fullResult, complexity)
+      break
     }
 
     default:
-      throw new Error(`Unknown pipeline type: ${pipelineType}`);
+      throw new Error(`Unknown pipeline type: ${pipelineType}`)
   }
 
-  onProgress?.('Conversion complete!', 100, 100);
-  return result;
+  onProgress?.('Conversion complete!', 100, 100)
+  return result
 }
 
 // ============================================================================
@@ -143,7 +143,7 @@ export async function convertDocument(
 
 function mapDirectResult(
   result: DirectPipelineResult,
-  complexity: DocumentComplexity
+  complexity: DocumentComplexity,
 ): ConversionResult {
   return {
     markdown: result.markdown,
@@ -157,12 +157,12 @@ function mapDirectResult(
       complexity: complexity.level,
     },
     complexity,
-  };
+  }
 }
 
 function mapLightResult(
   result: LightPipelineResult,
-  complexity: DocumentComplexity
+  complexity: DocumentComplexity,
 ): ConversionResult {
   return {
     markdown: result.markdown,
@@ -177,16 +177,16 @@ function mapLightResult(
     },
     structure: result.structure,
     complexity,
-  };
+  }
 }
 
 function mapFullResult(
   result: FullPipelineResult,
-  complexity: DocumentComplexity
+  complexity: DocumentComplexity,
 ): ConversionResult {
   return {
     markdown: result.markdown,
-    contents: result.windowResults.map((w) => w.markdown),
+    contents: result.windowResults.map(w => w.markdown),
     metadata: {
       pageCount: result.metadata.pageCount,
       language: result.metadata.language,
@@ -198,51 +198,46 @@ function mapFullResult(
     structure: result.structure,
     analysis: result.analysis,
     complexity,
-  };
+  }
 }
 
 // ============================================================================
 // Exports
 // ============================================================================
 
-export {
-  classifyDocumentComplexity,
-  runDirectPipeline,
-  runLightPipeline,
-  runFullPipeline,
-};
+export { classifyDocumentComplexity, runDirectPipeline, runFullPipeline, runLightPipeline }
 
 export type {
-  DocumentComplexity,
-  PipelineType,
   ComplexityLevel,
   DirectPipelineResult,
-  LightPipelineResult,
+  DocumentComplexity,
   FullPipelineResult,
-};
+  LightPipelineResult,
+  PipelineType,
+}
 
 // Robust pipeline with Effect.ts
 export {
+  APIError,
   convertDocumentRobust,
+  createRateLimiter,
+  DEFAULT_RATE_LIMIT_CONFIG,
+  DEFAULT_RETRY_CONFIG,
   processPagesBatch,
   processWindowsRobust,
+  RateLimitError,
+  runEffect,
+  TimeoutError,
   withRetry,
   withRobustness,
-  createRateLimiter,
-  runEffect,
-  APIError,
-  RateLimitError,
-  TimeoutError,
-  DEFAULT_RETRY_CONFIG,
-  DEFAULT_RATE_LIMIT_CONFIG,
-} from './robust-pipeline';
+} from './robust-pipeline'
 
 export type {
+  PipelineError,
+  RateLimitConfig,
+  RateLimiter,
+  RetryConfig,
   RobustConversionOptions,
   RobustConversionResult,
-  RetryConfig,
-  RateLimitConfig,
-  PipelineError,
-  RateLimiter,
   WindowProcessingOptions,
-} from './robust-pipeline';
+} from './robust-pipeline'

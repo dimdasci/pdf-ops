@@ -1,8 +1,8 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 interface ApiKeys {
-  gemini?: string;
-  anthropic?: string;
+  gemini?: string
+  anthropic?: string
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -13,9 +13,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // New multi-provider handlers
   saveApiKeys: (keys: ApiKeys) => ipcRenderer.invoke('save-api-keys', keys),
   getApiKeys: () => ipcRenderer.invoke('get-api-keys') as Promise<ApiKeys>,
-  saveProviderKey: (provider: string, key: string) => ipcRenderer.invoke('save-provider-key', provider, key),
-  getProviderKey: (provider: string) => ipcRenderer.invoke('get-provider-key', provider) as Promise<string | null>,
+  saveProviderKey: (provider: string, key: string) =>
+    ipcRenderer.invoke('save-provider-key', provider, key),
+  getProviderKey: (provider: string) =>
+    ipcRenderer.invoke('get-provider-key', provider) as Promise<string | null>,
   // File system handlers
   readFileBuffer: (path: string) => ipcRenderer.invoke('read-file-buffer', path),
   saveMarkdownFile: (content: string) => ipcRenderer.invoke('save-markdown-file', content),
-});
+})

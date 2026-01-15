@@ -5,27 +5,27 @@
  * Uses single-pass conversion without complex context building.
  */
 
-import type { PdfService } from '../pdf-service/types';
-import type { LLMProvider, PageConversionResult } from '../llm/types';
+import type { LLMProvider, PageConversionResult } from '../llm/types'
+import type { PdfService } from '../pdf-service/types'
 
 export interface DirectPipelineOptions {
   /** Progress callback */
-  onProgress?: (status: string, page: number, total: number) => void;
+  onProgress?: (status: string, page: number, total: number) => void
   /** Render DPI for page images */
-  dpi?: number;
+  dpi?: number
 }
 
 export interface DirectPipelineResult {
   /** Combined markdown content */
-  markdown: string;
+  markdown: string
   /** Per-page content */
-  pageContents: string[];
+  pageContents: string[]
   /** Metadata */
   metadata: {
-    pageCount: number;
-    language: string;
-    processingTimeMs: number;
-  };
+    pageCount: number
+    language: string
+    processingTimeMs: number
+  }
 }
 
 /**
@@ -35,24 +35,24 @@ export interface DirectPipelineResult {
 export async function runDirectPipeline(
   pdfService: PdfService,
   provider: LLMProvider,
-  options: DirectPipelineOptions = {}
+  options: DirectPipelineOptions = {},
 ): Promise<DirectPipelineResult> {
-  const startTime = Date.now();
-  const { onProgress, dpi = 150 } = options;
-  const pageCount = pdfService.getPageCount();
+  const startTime = Date.now()
+  const { onProgress, dpi = 150 } = options
+  const pageCount = pdfService.getPageCount()
 
-  onProgress?.('Starting direct conversion...', 0, pageCount);
+  onProgress?.('Starting direct conversion...', 0, pageCount)
 
-  const pageContents: string[] = [];
-  let previousContent = '';
-  let detectedLanguage = 'Unknown';
+  const pageContents: string[] = []
+  let previousContent = ''
+  let detectedLanguage = 'Unknown'
 
   // Process each page sequentially with minimal context
   for (let i = 1; i <= pageCount; i++) {
-    onProgress?.(`Converting page ${i} of ${pageCount}...`, i, pageCount);
+    onProgress?.(`Converting page ${i} of ${pageCount}...`, i, pageCount)
 
     // Render page to image
-    const imageBase64 = await pdfService.renderPage(i, { dpi });
+    const imageBase64 = await pdfService.renderPage(i, { dpi })
 
     // Convert page with minimal context
     const result = await provider.convertPage(imageBase64, {
@@ -65,26 +65,26 @@ export async function runDirectPipeline(
       headerPattern: null,
       footerPattern: null,
       language: detectedLanguage,
-    });
+    })
 
     // Process images if any
-    let pageContent = await processPageImages(
+    const pageContent = await processPageImages(
       pdfService,
       imageBase64,
-      result
-    );
+      result,
+    )
 
     // Detect language from first page
     if (i === 1 && result.content) {
-      detectedLanguage = detectLanguage(result.content);
+      detectedLanguage = detectLanguage(result.content)
     }
 
-    pageContents.push(pageContent);
-    previousContent = pageContent;
+    pageContents.push(pageContent)
+    previousContent = pageContent
   }
 
   // Combine pages
-  const markdown = pageContents.join('\n\n');
+  const markdown = pageContents.join('\n\n')
 
   return {
     markdown,
@@ -94,7 +94,7 @@ export async function runDirectPipeline(
       language: detectedLanguage,
       processingTimeMs: Date.now() - startTime,
     },
-  };
+  }
 }
 
 /**
@@ -103,41 +103,41 @@ export async function runDirectPipeline(
 async function processPageImages(
   pdfService: PdfService,
   pageImageBase64: string,
-  result: PageConversionResult
+  result: PageConversionResult,
 ): Promise<string> {
-  let content = result.content;
+  let content = result.content
 
   // Replace image placeholders with cropped images
-  const placeholders = Object.keys(result.images);
+  const placeholders = Object.keys(result.images)
   for (const placeholder of placeholders) {
     try {
-      const imageInfo = result.images[placeholder];
+      const imageInfo = result.images[placeholder]
       if (!imageInfo?.bbox || imageInfo.bbox.length !== 4) {
-        continue;
+        continue
       }
 
       const croppedDataUrl = await pdfService.cropImage(pageImageBase64, {
         bbox: imageInfo.bbox,
-      });
+      })
 
       if (croppedDataUrl) {
-        content = content.replaceAll(placeholder, croppedDataUrl);
+        content = content.replaceAll(placeholder, croppedDataUrl)
       }
     } catch (err) {
-      console.warn(`Failed to crop image ${placeholder}:`, err);
+      console.warn(`Failed to crop image ${placeholder}:`, err)
     }
   }
 
   // Clean up any remaining placeholders
   content = content.replace(
     /!\[(.*?)\]\((img_placeholder_[a-zA-Z0-9_]+)\)/g,
-    '> *[Image: $1]*'
-  );
+    '> *[Image: $1]*',
+  )
 
   // Clean up empty image references
-  content = content.replace(/!\[(.*?)\]\(\s*\)/g, '> *[Image: $1]*');
+  content = content.replace(/!\[(.*?)\]\(\s*\)/g, '> *[Image: $1]*')
 
-  return content;
+  return content
 }
 
 /**
@@ -151,20 +151,18 @@ function detectLanguage(content: string): string {
     French: [/\ble\b/i, /\bla\b/i, /\bde\b/i, /\bet\b/i, /\best\b/i],
     Spanish: [/\bel\b/i, /\bla\b/i, /\bde\b/i, /\by\b/i, /\ben\b/i],
     Russian: [/\bи\b/i, /\bв\b/i, /\bна\b/i, /\bне\b/i, /\bс\b/i],
-  };
+  }
 
-  const scores: Record<string, number> = {};
+  const scores: Record<string, number> = {}
 
   for (const [language, regexes] of Object.entries(patterns)) {
     scores[language] = regexes.reduce(
       (score, regex) => score + (regex.test(content) ? 1 : 0),
-      0
-    );
+      0,
+    )
   }
 
-  const best = Object.entries(scores).reduce((a, b) =>
-    b[1] > a[1] ? b : a
-  );
+  const best = Object.entries(scores).reduce((a, b) => b[1] > a[1] ? b : a)
 
-  return best[1] >= 3 ? best[0] : 'Unknown';
+  return best[1] >= 3 ? best[0] : 'Unknown'
 }

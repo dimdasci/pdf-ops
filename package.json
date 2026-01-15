@@ -11,9 +11,26 @@
     "electron:start": "electron .",
     "start": "concurrently \"npm run dev\" \"wait-on tcp:5173 && npm run electron:build && cross-env NODE_ENV=development npm run electron:start\"",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "dprint fmt",
+    "format:check": "dprint check",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "preview": "vite preview",
     "test:e2e": "vitest run --config tests/vitest.config.ts",
-    "test:e2e:watch": "vitest --config tests/vitest.config.ts"
+    "test:e2e:watch": "vitest --config tests/vitest.config.ts",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "dprint fmt",
+      "eslint --fix --max-warnings 0"
+    ],
+    "*.json": [
+      "dprint fmt"
+    ],
+    "*.md": [
+      "dprint fmt"
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -48,12 +65,15 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "dotenv": "^17.2.3",
+    "dprint": "^0.51.1",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "remark-parse": "^11.0.0",
     "string-similarity": "^4.0.4",
     "typescript": "~5.9.3",

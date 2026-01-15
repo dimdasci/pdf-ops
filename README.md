@@ -7,9 +7,9 @@ A desktop application powered by Electron, React, and Google Gemini to convert P
 - **Secure API Key Storage**: Safely stores your Google Gemini API key using `safeStorage`.
 - **PDF Viewer**: Built-in PDF viewer with page navigation.
 - **AI-Powered Conversion**: Uses Gemini 1.5 Flash for intelligent document analysis and conversion.
-    - **Structure Preservation**: Maintains headers, lists, and tables.
-    - **Image Handling**: Describes and references images.
-    - **Context Aware**: Converts page-by-page while maintaining context.
+  - **Structure Preservation**: Maintains headers, lists, and tables.
+  - **Image Handling**: Describes and references images.
+  - **Context Aware**: Converts page-by-page while maintaining context.
 - **Split-View Editor**: Preview the generated Markdown side-by-side with the PDF.
 - **Export**: Save the converted Markdown file to your disk.
 

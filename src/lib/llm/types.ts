@@ -9,25 +9,25 @@
 
 export interface DocumentAnalysis {
   /** Detected document language */
-  language: string;
+  language: string
   /** Whether document has an embedded Table of Contents */
-  hasTOC: boolean;
+  hasTOC: boolean
   /** Total page count */
-  pageCount: number;
+  pageCount: number
   /** Estimated number of images */
-  estimatedImages: number;
+  estimatedImages: number
   /** Estimated number of tables */
-  estimatedTables: number;
+  estimatedTables: number
   /** Estimated number of code blocks */
-  estimatedCodeBlocks: number;
+  estimatedCodeBlocks: number
   /** Header pattern detected (if any) */
-  headerPattern: string | null;
+  headerPattern: string | null
   /** Footer pattern detected (if any) */
-  footerPattern: string | null;
+  footerPattern: string | null
   /** Content type classification */
-  contentType: 'invoice' | 'report' | 'manual' | 'academic' | 'form' | 'other';
+  contentType: 'invoice' | 'report' | 'manual' | 'academic' | 'form' | 'other'
   /** Text density assessment */
-  textDensity: 'sparse' | 'normal' | 'dense';
+  textDensity: 'sparse' | 'normal' | 'dense'
 }
 
 // ============================================================================
@@ -36,35 +36,35 @@ export interface DocumentAnalysis {
 
 export interface HeadingInfo {
   /** Heading level (1-6) */
-  level: number;
+  level: number
   /** Heading text */
-  text: string;
+  text: string
   /** Page number where heading appears */
-  page: number;
+  page: number
 }
 
 export interface SectionInfo {
   /** Section title */
-  title: string;
+  title: string
   /** Heading level */
-  level: number;
+  level: number
   /** Start page */
-  startPage: number;
+  startPage: number
   /** End page (inclusive) */
-  endPage: number;
+  endPage: number
   /** Child sections */
-  children: SectionInfo[];
+  children: SectionInfo[]
 }
 
 export interface DocumentStructure {
   /** Complete heading hierarchy */
-  headings: HeadingInfo[];
+  headings: HeadingInfo[]
   /** Section tree structure */
-  sections: SectionInfo[];
+  sections: SectionInfo[]
   /** Headings indexed by page number */
-  headingsByPage: Map<number, HeadingInfo[]>;
+  headingsByPage: Map<number, HeadingInfo[]>
   /** Maximum heading depth */
-  maxDepth: number;
+  maxDepth: number
 }
 
 // ============================================================================
@@ -73,26 +73,26 @@ export interface DocumentStructure {
 
 export interface ImageInfo {
   /** Unique identifier for this image */
-  id: string;
+  id: string
   /** Bounding box [ymin, xmin, ymax, xmax] on 0-1000 scale */
-  bbox: [number, number, number, number];
+  bbox: [number, number, number, number]
   /** Description of the image content */
-  description: string;
+  description: string
   /** Image type classification */
-  type: 'photo' | 'diagram' | 'chart' | 'logo' | 'icon' | 'screenshot' | 'other';
+  type: 'photo' | 'diagram' | 'chart' | 'logo' | 'icon' | 'screenshot' | 'other'
 }
 
 export interface PageConversionResult {
   /** Converted markdown content */
-  content: string;
+  content: string
   /** Detected images with bounding boxes */
-  images: Record<string, ImageInfo>;
+  images: Record<string, ImageInfo>
   /** Summary of the page content (for context in next page) */
-  summary: string;
+  summary: string
   /** Last paragraph text (for page-break handling) */
-  lastParagraph: string;
+  lastParagraph: string
   /** Any errors or warnings */
-  warnings: string[];
+  warnings: string[]
 }
 
 // ============================================================================
@@ -101,62 +101,62 @@ export interface PageConversionResult {
 
 export interface PageContext {
   /** Current page number */
-  pageNumber: number;
+  pageNumber: number
   /** Total pages in document */
-  totalPages: number;
+  totalPages: number
   /** Content from previous page (for context) */
-  previousContent: string;
+  previousContent: string
   /** Summary of previous page */
-  previousSummary: string;
+  previousSummary: string
   /** Expected headings on this page (from structure) */
-  expectedHeadings: HeadingInfo[];
+  expectedHeadings: HeadingInfo[]
   /** Current section being processed */
-  currentSection: string | null;
+  currentSection: string | null
   /** Header pattern to exclude */
-  headerPattern: string | null;
+  headerPattern: string | null
   /** Footer pattern to exclude */
-  footerPattern: string | null;
+  footerPattern: string | null
   /** Document language */
-  language: string;
+  language: string
 }
 
 export interface WindowContext {
   /** Global document context */
   global: {
-    totalPages: number;
-    language: string;
-    toc: HeadingInfo[];
-    headerPattern: string | null;
-    footerPattern: string | null;
-  };
+    totalPages: number
+    language: string
+    toc: HeadingInfo[]
+    headerPattern: string | null
+    footerPattern: string | null
+  }
   /** Window position in document */
   position: {
-    windowNumber: number;
-    totalWindows: number;
-    startPage: number;
-    endPage: number;
-    percentComplete: number;
-  };
+    windowNumber: number
+    totalWindows: number
+    startPage: number
+    endPage: number
+    percentComplete: number
+  }
   /** Structural context for this window */
   structure: {
-    sectionsInWindow: SectionInfo[];
-    expectedHeadings: HeadingInfo[];
-    continuedSection: string | null;
-    sectionContinuesAfter: boolean;
-  };
+    sectionsInWindow: SectionInfo[]
+    expectedHeadings: HeadingInfo[]
+    continuedSection: string | null
+    sectionContinuesAfter: boolean
+  }
   /** Content continuity from previous window */
   continuity: {
-    previousWindowTail: string;
-    previousWindowSummary: string;
-    pendingReferences: Array<{ id: string; type: 'footnote' | 'figure' | 'table' }>;
-  };
+    previousWindowTail: string
+    previousWindowSummary: string
+    pendingReferences: Array<{ id: string; type: 'footnote' | 'figure' | 'table' }>
+  }
   /** Content expectations for this window */
   expectations: {
-    estimatedImages: number;
-    estimatedTables: number;
-    hasCodeBlocks: boolean;
-    hasMathFormulas: boolean;
-  };
+    estimatedImages: number
+    estimatedTables: number
+    hasCodeBlocks: boolean
+    hasMathFormulas: boolean
+  }
 }
 
 // ============================================================================
@@ -165,24 +165,24 @@ export interface WindowContext {
 
 export interface WindowSpec {
   /** Start page (inclusive) */
-  startPage: number;
+  startPage: number
   /** End page (inclusive) */
-  endPage: number;
+  endPage: number
   /** Sections contained in this window */
-  sectionsInWindow: SectionInfo[];
+  sectionsInWindow: SectionInfo[]
 }
 
 export interface WindowResult {
   /** Converted markdown for this window */
-  markdown: string;
+  markdown: string
   /** Last paragraph for continuity */
-  lastParagraph: string;
+  lastParagraph: string
   /** Summary for context passing */
-  summary: string;
+  summary: string
   /** Unresolved references */
-  unresolvedReferences: Array<{ id: string; type: 'footnote' | 'figure' | 'table' }>;
+  unresolvedReferences: Array<{ id: string; type: 'footnote' | 'figure' | 'table' }>
   /** Detected images */
-  detectedImages: ImageInfo[];
+  detectedImages: ImageInfo[]
 }
 
 // ============================================================================
@@ -191,17 +191,17 @@ export interface WindowResult {
 
 export interface ProviderCapabilities {
   /** Whether provider supports native PDF input */
-  supportsNativePdf: boolean;
+  supportsNativePdf: boolean
   /** Maximum pages for native PDF processing */
-  maxPdfPages: number;
+  maxPdfPages: number
   /** Maximum image size in bytes */
-  maxImageSize: number;
+  maxImageSize: number
   /** Maximum context window in tokens */
-  maxContextTokens: number;
+  maxContextTokens: number
   /** Whether provider has RECITATION filtering */
-  hasRecitationFilter: boolean;
+  hasRecitationFilter: boolean
   /** Supported image formats */
-  supportedImageFormats: string[];
+  supportedImageFormats: string[]
 }
 
 // ============================================================================
@@ -210,13 +210,13 @@ export interface ProviderCapabilities {
 
 export interface LLMProvider {
   /** Provider name (e.g., 'claude', 'gemini') */
-  readonly name: string;
+  readonly name: string
 
   /** Display name for UI */
-  readonly displayName: string;
+  readonly displayName: string
 
   /** Provider capabilities */
-  readonly capabilities: ProviderCapabilities;
+  readonly capabilities: ProviderCapabilities
 
   // -------------------------------------------------------------------------
   // Document-Level Operations
@@ -227,7 +227,7 @@ export interface LLMProvider {
    * @param pdfData - PDF data as Uint8Array or base64 string
    * @returns Document analysis results
    */
-  analyzeDocument(pdfData: Uint8Array | string): Promise<DocumentAnalysis>;
+  analyzeDocument(pdfData: Uint8Array | string): Promise<DocumentAnalysis>
 
   /**
    * Extract document structure (headings, sections, TOC).
@@ -237,8 +237,8 @@ export interface LLMProvider {
    */
   extractStructure(
     pdfData: Uint8Array | string,
-    analysis: DocumentAnalysis
-  ): Promise<DocumentStructure>;
+    analysis: DocumentAnalysis,
+  ): Promise<DocumentStructure>
 
   // -------------------------------------------------------------------------
   // Page-Level Operations
@@ -252,8 +252,8 @@ export interface LLMProvider {
    */
   convertPage(
     imageBase64: string,
-    context: PageContext
-  ): Promise<PageConversionResult>;
+    context: PageContext,
+  ): Promise<PageConversionResult>
 
   /**
    * Convert a window (multiple pages) to markdown.
@@ -263,8 +263,8 @@ export interface LLMProvider {
    */
   convertWindow(
     pdfData: Uint8Array | string,
-    context: WindowContext
-  ): Promise<WindowResult>;
+    context: WindowContext,
+  ): Promise<WindowResult>
 
   // -------------------------------------------------------------------------
   // Utility Operations
@@ -276,11 +276,11 @@ export interface LLMProvider {
    * @returns Classification result
    */
   classifyImage(imageBase64: string): Promise<{
-    type: ImageInfo['type'];
-    description: string;
-    isPureVector: boolean;
-    complexity: number;
-  }>;
+    type: ImageInfo['type']
+    description: string
+    isPureVector: boolean
+    complexity: number
+  }>
 
   /**
    * Generate a summary of content for context passing.
@@ -288,14 +288,14 @@ export interface LLMProvider {
    * @param maxLength - Maximum summary length
    * @returns Summary text
    */
-  summarize(content: string, maxLength?: number): Promise<string>;
+  summarize(content: string, maxLength?: number): Promise<string>
 
   /**
    * Simple chat completion for utility tasks.
    * @param prompt - Prompt text
    * @returns Response text
    */
-  chat(prompt: string): Promise<string>;
+  chat(prompt: string): Promise<string>
 
   // -------------------------------------------------------------------------
   // Provider Management
@@ -305,7 +305,7 @@ export interface LLMProvider {
    * Validate the API key and connection.
    * @returns Whether the provider is properly configured
    */
-  validateConnection(): Promise<boolean>;
+  validateConnection(): Promise<boolean>
 
   /**
    * Get the estimated cost for processing a document.
@@ -313,7 +313,7 @@ export interface LLMProvider {
    * @param complexity - Document complexity (0-1)
    * @returns Estimated cost in USD
    */
-  estimateCost(pageCount: number, complexity: number): number;
+  estimateCost(pageCount: number, complexity: number): number
 }
 
 // ============================================================================
@@ -322,32 +322,32 @@ export interface LLMProvider {
 
 export interface ProviderConfig {
   /** API key */
-  apiKey: string;
+  apiKey: string
   /** Model name/version to use */
-  model?: string;
+  model?: string
   /** Maximum retries for failed requests */
-  maxRetries?: number;
+  maxRetries?: number
   /** Request timeout in milliseconds */
-  timeout?: number;
+  timeout?: number
   /** Custom base URL (for proxies) */
-  baseUrl?: string;
+  baseUrl?: string
 }
 
 export interface ClaudeProviderConfig extends ProviderConfig {
   /** Anthropic-specific: model version */
-  model?: 'claude-sonnet-4-20250514' | 'claude-opus-4-20250514' | 'claude-3-5-sonnet-20241022';
+  model?: 'claude-sonnet-4-20250514' | 'claude-opus-4-20250514' | 'claude-3-5-sonnet-20241022'
 }
 
 export interface GeminiProviderConfig extends ProviderConfig {
   /** Gemini-specific: model version */
-  model?: 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gemini-1.5-pro';
+  model?: 'gemini-2.5-flash' | 'gemini-2.0-flash' | 'gemini-1.5-pro'
 }
 
 // ============================================================================
 // Provider Factory Types
 // ============================================================================
 
-export type ProviderType = 'claude' | 'gemini';
+export type ProviderType = 'claude' | 'gemini'
 
 export interface ProviderFactory {
   /**
@@ -356,11 +356,11 @@ export interface ProviderFactory {
    * @param config - Provider configuration
    * @returns Provider instance
    */
-  create(type: ProviderType, config: ProviderConfig): LLMProvider;
+  create(type: ProviderType, config: ProviderConfig): LLMProvider
 
   /**
    * Get available provider types.
    * @returns Array of available provider types
    */
-  getAvailableTypes(): ProviderType[];
+  getAvailableTypes(): ProviderType[]
 }
