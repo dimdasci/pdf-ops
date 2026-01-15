@@ -460,6 +460,44 @@ npm run test:e2e -- --run tests/e2e/pipeline.test.ts
 | Markdown format    | Parseable                  |
 | H1/H2 detection    | Matches expected           |
 
+## Code Quality
+
+### Pre-commit Checks
+
+All commits are automatically validated with:
+
+1. **TypeScript type checking** - Full project typecheck across all tsconfig files
+2. **dprint formatting** - Fast Rust-based formatter for TS, JSON, Markdown
+3. **ESLint** - Static analysis with auto-fix
+
+### Tools
+
+| Tool        | Purpose                | Config File         |
+| ----------- | ---------------------- | ------------------- |
+| dprint      | Code formatting        | `dprint.json`       |
+| ESLint      | Linting                | `eslint.config.js`  |
+| Husky       | Git hooks              | `.husky/pre-commit` |
+| lint-staged | Staged file processing | `package.json`      |
+
+### Code Style
+
+- **Semicolons**: None (ASI)
+- **Quotes**: Single quotes for JS/TS, double for JSX
+- **Indentation**: 2 spaces
+- **Line width**: 100 characters
+- **Trailing commas**: Only in multiline
+- **Unused variables**: Prefix with `_` to suppress errors
+
+### Commands
+
+```bash
+npm run format        # Format all files
+npm run format:check  # Check formatting (CI)
+npm run lint          # Run ESLint
+npm run lint:fix      # Fix ESLint errors
+npm run typecheck     # TypeScript type checking
+```
+
 ## Dependencies
 
 ### Core
@@ -481,3 +519,9 @@ npm run test:e2e -- --run tests/e2e/pipeline.test.ts
 ### Node.js PDF Rendering
 
 - `@napi-rs/canvas`: Native canvas for Node.js (replaces node-canvas)
+
+### Code Quality
+
+- `dprint`: Fast Rust-based code formatter
+- `husky`: Git hooks management
+- `lint-staged`: Run linters on staged files

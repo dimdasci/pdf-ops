@@ -7,9 +7,11 @@ Desktop application built with Electron and TypeScript to convert PDF documents 
 ## Tech Stack
 
 - **Framework**: Electron
-- **Language**: TypeScript
-- **AI**: Google Gemini LLMs
-- **Build**: Electron Builder (recommended)
+- **Language**: TypeScript (strict mode)
+- **UI**: React 19
+- **AI**: Google Gemini, Anthropic Claude
+- **Build**: Vite + Electron Builder
+- **Code Quality**: dprint (formatter), ESLint, Husky (git hooks)
 
 ## Architecture
 
@@ -95,8 +97,11 @@ Recommended approach for footnotes in Markdown:
 # Install dependencies
 npm install
 
-# Run in development
+# Run in development (Vite dev server)
 npm run dev
+
+# Run Electron app in development
+npm start
 
 # Build for production
 npm run build
@@ -104,6 +109,41 @@ npm run build
 # Package application
 npm run package
 ```
+
+## Code Quality
+
+Pre-commit hooks automatically run on every commit:
+
+```bash
+# Format code with dprint
+npm run format
+
+# Check formatting (CI)
+npm run format:check
+
+# Run ESLint
+npm run lint
+
+# Fix ESLint errors
+npm run lint:fix
+
+# TypeScript type checking
+npm run typecheck
+```
+
+**Pre-commit checks (automatic):**
+
+1. TypeScript type checking (all tsconfig files)
+2. dprint formatting (TS, JSON, Markdown)
+3. ESLint with auto-fix
+
+**Code style:**
+
+- No semicolons (ASI)
+- Single quotes
+- 2-space indentation
+- Trailing commas in multiline
+- Unused variables: prefix with `_`
 
 ## Project Structure (Recommended)
 
@@ -129,5 +169,16 @@ src/
 - Use context isolation in Electron
 
 ## Testing
+
+```bash
+# Run E2E tests (default: Gemini provider)
+npm run test:e2e
+
+# Run with Claude provider
+PROVIDER=claude npm run test:e2e
+
+# Watch mode
+npm run test:e2e:watch
+```
 
 See [docs/requirements/testing.md](docs/requirements/testing.md) for E2E testing specification.
