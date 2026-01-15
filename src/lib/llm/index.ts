@@ -5,43 +5,49 @@
 
 // Types
 export type {
-  LLMProvider,
-  ProviderCapabilities,
-  ProviderConfig,
   ClaudeProviderConfig,
-  GeminiProviderConfig,
-  ProviderType,
-  ProviderFactory,
   DocumentAnalysis,
   DocumentStructure,
+  GeminiProviderConfig,
   HeadingInfo,
-  SectionInfo,
+  ImageInfo,
+  LLMProvider,
   PageContext,
   PageConversionResult,
+  ProviderCapabilities,
+  ProviderConfig,
+  ProviderFactory,
+  ProviderType,
+  SectionInfo,
   WindowContext,
   WindowResult,
   WindowSpec,
-  ImageInfo,
-} from './types';
+} from './types'
 
 // Providers
-export { ClaudeProvider } from './claude-provider';
-export { GeminiProvider } from './gemini-provider';
+export { ClaudeProvider } from './claude-provider'
+export { GeminiProvider } from './gemini-provider'
 
 // Registry
 export {
-  ProviderRegistry,
-  getProviderRegistry,
-  getProvider,
   getCurrentProvider,
-  type ProviderRegistryConfig,
+  getProvider,
+  getProviderRegistry,
   type ProviderInfo,
-} from './provider-registry';
+  ProviderRegistry,
+  type ProviderRegistryConfig,
+} from './provider-registry'
 
 // Factory function for creating providers
-import type { LLMProvider, ProviderType, ProviderConfig } from './types';
-import { ClaudeProvider } from './claude-provider';
-import { GeminiProvider } from './gemini-provider';
+import { ClaudeProvider } from './claude-provider'
+import { GeminiProvider } from './gemini-provider'
+import type {
+  ClaudeProviderConfig,
+  GeminiProviderConfig,
+  LLMProvider,
+  ProviderConfig,
+  ProviderType,
+} from './types'
 
 /**
  * Create an LLM provider instance.
@@ -52,11 +58,11 @@ import { GeminiProvider } from './gemini-provider';
 export function createProvider(type: ProviderType, config: ProviderConfig): LLMProvider {
   switch (type) {
     case 'claude':
-      return new ClaudeProvider(config);
+      return new ClaudeProvider(config as ClaudeProviderConfig)
     case 'gemini':
-      return new GeminiProvider(config);
+      return new GeminiProvider(config as GeminiProviderConfig)
     default:
-      throw new Error(`Unknown provider type: ${type}`);
+      throw new Error(`Unknown provider type: ${type}`)
   }
 }
 
@@ -64,5 +70,5 @@ export function createProvider(type: ProviderType, config: ProviderConfig): LLMP
  * Get all supported provider types.
  */
 export function getSupportedProviderTypes(): ProviderType[] {
-  return ['claude', 'gemini'];
+  return ['claude', 'gemini']
 }

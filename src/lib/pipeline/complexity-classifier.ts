@@ -5,62 +5,62 @@
  * and recommend the optimal processing pipeline.
  */
 
-import type { PdfService, EmbeddedImage } from '../pdf-service/types';
+import type { EmbeddedImage, PdfService } from '../pdf-service/types'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ComplexityLevel = 'simple' | 'moderate' | 'complex';
-export type PipelineType = 'direct' | 'light' | 'full';
-export type TextDensity = 'sparse' | 'normal' | 'dense';
+export type ComplexityLevel = 'simple' | 'moderate' | 'complex'
+export type PipelineType = 'direct' | 'light' | 'full'
+export type TextDensity = 'sparse' | 'normal' | 'dense'
 
 export interface ComplexityFactors {
   /** Total page count */
-  pageCount: number;
+  pageCount: number
   /** Whether document has an embedded TOC/outline */
-  hasEmbeddedTOC: boolean;
+  hasEmbeddedTOC: boolean
   /** Estimated number of images */
-  estimatedImages: number;
+  estimatedImages: number
   /** Estimated number of tables */
-  estimatedTables: number;
+  estimatedTables: number
   /** Whether document contains vector graphics */
-  hasVectorGraphics: boolean;
+  hasVectorGraphics: boolean
   /** Text density assessment */
-  textDensity: TextDensity;
+  textDensity: TextDensity
   /** Maximum heading depth detected */
-  structureDepth: number;
+  structureDepth: number
   /** Average characters per page */
-  avgCharsPerPage: number;
+  avgCharsPerPage: number
   /** Presence of special content */
-  hasCodeBlocks: boolean;
-  hasMathFormulas: boolean;
+  hasCodeBlocks: boolean
+  hasMathFormulas: boolean
 }
 
 export interface DocumentComplexity {
   /** Overall complexity level */
-  level: ComplexityLevel;
+  level: ComplexityLevel
   /** Numeric complexity score (0-100) */
-  score: number;
+  score: number
   /** Individual factors contributing to complexity */
-  factors: ComplexityFactors;
+  factors: ComplexityFactors
   /** Recommended processing pipeline */
-  recommendedPipeline: PipelineType;
+  recommendedPipeline: PipelineType
   /** Estimated processing time in seconds */
-  estimatedTimeSeconds: number;
+  estimatedTimeSeconds: number
   /** Reasoning for the recommendation */
-  reasoning: string[];
+  reasoning: string[]
 }
 
 export interface ClassifierOptions {
   /** Number of pages to sample for analysis (default: 3) */
-  sampleSize?: number;
+  sampleSize?: number
   /** Whether to detect vector graphics (slower but more accurate) */
-  detectVectors?: boolean;
+  detectVectors?: boolean
   /** Minimum complexity score for 'moderate' classification */
-  moderateThreshold?: number;
+  moderateThreshold?: number
   /** Minimum complexity score for 'complex' classification */
-  complexThreshold?: number;
+  complexThreshold?: number
 }
 
 // ============================================================================
@@ -72,7 +72,7 @@ const DEFAULT_OPTIONS: Required<ClassifierOptions> = {
   detectVectors: false, // Disabled by default for speed
   moderateThreshold: 20,
   complexThreshold: 60,
-};
+}
 
 // ============================================================================
 // Complexity Classifier Implementation
@@ -83,53 +83,53 @@ const DEFAULT_OPTIONS: Required<ClassifierOptions> = {
  */
 export async function classifyDocumentComplexity(
   pdfService: PdfService,
-  options: ClassifierOptions = {}
+  options: ClassifierOptions = {},
 ): Promise<DocumentComplexity> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  const pageCount = pdfService.getPageCount();
+  const opts = { ...DEFAULT_OPTIONS, ...options }
+  const pageCount = pdfService.getPageCount()
 
   // Get metadata and outline
   const [metadata, outline] = await Promise.all([
     pdfService.getMetadata(),
     pdfService.getOutline(),
-  ]);
+  ])
 
   // Determine sample pages (first, middle, last)
-  const samplePageNumbers = getSamplePageNumbers(pageCount, opts.sampleSize);
+  const samplePageNumbers = getSamplePageNumbers(pageCount, opts.sampleSize)
 
   // Analyze sample pages
   const samples = await Promise.all(
-    samplePageNumbers.map(async (pageNum) => {
+    samplePageNumbers.map(async pageNum => {
       const [text, images] = await Promise.all([
         pdfService.getPageText(pageNum),
         safeGetPageImages(pdfService, pageNum),
-      ]);
+      ])
 
       return {
         pageNum,
         text,
         images,
         charCount: text.length,
-      };
-    })
-  );
+      }
+    }),
+  )
 
   // Calculate factors
-  const factors = calculateFactors(pageCount, outline, samples, metadata);
+  const factors = calculateFactors(pageCount, outline, samples, metadata)
 
   // Calculate complexity score
-  const score = calculateComplexityScore(factors);
+  const score = calculateComplexityScore(factors)
 
   // Determine level and pipeline
   const { level, pipeline, reasoning } = determineComplexityLevel(
     score,
     factors,
     opts.moderateThreshold,
-    opts.complexThreshold
-  );
+    opts.complexThreshold,
+  )
 
   // Estimate processing time
-  const estimatedTimeSeconds = estimateProcessingTime(factors, pipeline);
+  const estimatedTimeSeconds = estimateProcessingTime(factors, pipeline)
 
   return {
     level,
@@ -138,7 +138,7 @@ export async function classifyDocumentComplexity(
     recommendedPipeline: pipeline,
     estimatedTimeSeconds,
     reasoning,
-  };
+  }
 }
 
 // ============================================================================
@@ -150,31 +150,31 @@ export async function classifyDocumentComplexity(
  */
 function getSamplePageNumbers(totalPages: number, sampleSize: number): number[] {
   if (totalPages <= sampleSize) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
+    return Array.from({ length: totalPages }, (_, i) => i + 1)
   }
 
-  const pages: number[] = [1]; // Always include first page
+  const pages: number[] = [1] // Always include first page
 
   if (sampleSize >= 2 && totalPages > 1) {
-    pages.push(totalPages); // Always include last page
+    pages.push(totalPages) // Always include last page
   }
 
   if (sampleSize >= 3 && totalPages > 2) {
-    pages.splice(1, 0, Math.floor(totalPages / 2)); // Add middle page
+    pages.splice(1, 0, Math.floor(totalPages / 2)) // Add middle page
   }
 
   // Add more evenly distributed pages if needed
   if (sampleSize > 3) {
-    const step = Math.floor(totalPages / (sampleSize - 1));
+    const step = Math.floor(totalPages / (sampleSize - 1))
     for (let i = step; i < totalPages; i += step) {
       if (!pages.includes(i) && pages.length < sampleSize) {
-        pages.push(i);
+        pages.push(i)
       }
     }
-    pages.sort((a, b) => a - b);
+    pages.sort((a, b) => a - b)
   }
 
-  return pages.slice(0, sampleSize);
+  return pages.slice(0, sampleSize)
 }
 
 /**
@@ -182,20 +182,20 @@ function getSamplePageNumbers(totalPages: number, sampleSize: number): number[] 
  */
 async function safeGetPageImages(
   pdfService: PdfService,
-  pageNum: number
+  pageNum: number,
 ): Promise<EmbeddedImage[]> {
   try {
-    return await pdfService.getPageImages(pageNum);
+    return await pdfService.getPageImages(pageNum)
   } catch {
-    return [];
+    return []
   }
 }
 
 interface PageSample {
-  pageNum: number;
-  text: string;
-  images: EmbeddedImage[];
-  charCount: number;
+  pageNum: number
+  text: string
+  images: EmbeddedImage[]
+  charCount: number
 }
 
 /**
@@ -205,32 +205,31 @@ function calculateFactors(
   pageCount: number,
   outline: Awaited<ReturnType<PdfService['getOutline']>>,
   samples: PageSample[],
-  _metadata: Awaited<ReturnType<PdfService['getMetadata']>>
+  _metadata: Awaited<ReturnType<PdfService['getMetadata']>>,
 ): ComplexityFactors {
   // Calculate averages from samples
-  const avgCharsPerPage =
-    samples.reduce((sum, s) => sum + s.charCount, 0) / samples.length;
-  const totalSampleImages = samples.reduce((sum, s) => sum + s.images.length, 0);
+  const avgCharsPerPage = samples.reduce((sum, s) => sum + s.charCount, 0) / samples.length
+  const totalSampleImages = samples.reduce((sum, s) => sum + s.images.length, 0)
 
   // Estimate total images based on sample
   const estimatedImages = Math.round(
-    (totalSampleImages / samples.length) * pageCount
-  );
+    (totalSampleImages / samples.length) * pageCount,
+  )
 
   // Estimate tables by looking for table-like patterns in text
-  const estimatedTables = estimateTableCount(samples);
+  const estimatedTables = estimateTableCount(samples)
 
   // Determine text density
-  const textDensity = classifyTextDensity(avgCharsPerPage);
+  const textDensity = classifyTextDensity(avgCharsPerPage)
 
   // Analyze structure depth from outline or infer from text
   const structureDepth = outline
     ? getOutlineMaxDepth(outline)
-    : estimateStructureDepth(samples);
+    : estimateStructureDepth(samples)
 
   // Check for special content
-  const hasCodeBlocks = samples.some((s) => detectCodePatterns(s.text));
-  const hasMathFormulas = samples.some((s) => detectMathPatterns(s.text));
+  const hasCodeBlocks = samples.some(s => detectCodePatterns(s.text))
+  const hasMathFormulas = samples.some(s => detectMathPatterns(s.text))
 
   return {
     pageCount,
@@ -243,52 +242,52 @@ function calculateFactors(
     avgCharsPerPage,
     hasCodeBlocks,
     hasMathFormulas,
-  };
+  }
 }
 
 /**
  * Estimate table count from text patterns.
  */
 function estimateTableCount(samples: PageSample[]): number {
-  let tablePatternCount = 0;
+  let tablePatternCount = 0
 
   for (const sample of samples) {
     // Look for table-like patterns: multiple columns separated by tabs or |
-    const lines = sample.text.split('\n');
-    let consecutiveTableLines = 0;
+    const lines = sample.text.split('\n')
+    let consecutiveTableLines = 0
 
     for (const line of lines) {
       // Check for pipe-separated columns or tab-separated data
-      const hasPipes = (line.match(/\|/g) || []).length >= 2;
-      const hasTabs = (line.match(/\t/g) || []).length >= 2;
-      const hasMultipleNumbers = (line.match(/\d+/g) || []).length >= 3;
+      const hasPipes = (line.match(/\|/g) || []).length >= 2
+      const hasTabs = (line.match(/\t/g) || []).length >= 2
+      const hasMultipleNumbers = (line.match(/\d+/g) || []).length >= 3
 
       if (hasPipes || (hasTabs && hasMultipleNumbers)) {
-        consecutiveTableLines++;
+        consecutiveTableLines++
       } else {
         if (consecutiveTableLines >= 3) {
-          tablePatternCount++;
+          tablePatternCount++
         }
-        consecutiveTableLines = 0;
+        consecutiveTableLines = 0
       }
     }
 
     if (consecutiveTableLines >= 3) {
-      tablePatternCount++;
+      tablePatternCount++
     }
   }
 
   // Extrapolate to full document
-  return Math.round((tablePatternCount / samples.length) * (samples[0]?.pageNum || 1));
+  return Math.round((tablePatternCount / samples.length) * (samples[0]?.pageNum || 1))
 }
 
 /**
  * Classify text density based on characters per page.
  */
 function classifyTextDensity(avgCharsPerPage: number): TextDensity {
-  if (avgCharsPerPage < 500) return 'sparse';
-  if (avgCharsPerPage > 2500) return 'dense';
-  return 'normal';
+  if (avgCharsPerPage < 500) return 'sparse'
+  if (avgCharsPerPage > 2500) return 'dense'
+  return 'normal'
 }
 
 /**
@@ -296,47 +295,47 @@ function classifyTextDensity(avgCharsPerPage: number): TextDensity {
  */
 function getOutlineMaxDepth(
   outline: NonNullable<Awaited<ReturnType<PdfService['getOutline']>>>,
-  currentDepth: number = 1
+  currentDepth: number = 1,
 ): number {
-  let maxDepth = currentDepth;
+  let maxDepth = currentDepth
 
   for (const item of outline) {
-    if (item.items && item.items.length > 0) {
-      const childDepth = getOutlineMaxDepth(item.items, currentDepth + 1);
-      maxDepth = Math.max(maxDepth, childDepth);
+    if (item.children && item.children.length > 0) {
+      const childDepth = getOutlineMaxDepth(item.children, currentDepth + 1)
+      maxDepth = Math.max(maxDepth, childDepth)
     }
   }
 
-  return maxDepth;
+  return maxDepth
 }
 
 /**
  * Estimate structure depth from text patterns.
  */
 function estimateStructureDepth(samples: PageSample[]): number {
-  let maxDepth = 1;
+  let maxDepth = 1
 
   for (const sample of samples) {
-    const lines = sample.text.split('\n');
+    const lines = sample.text.split('\n')
 
     for (const line of lines) {
       // Look for numbered headings (1., 1.1., 1.1.1., etc.)
-      const numberedMatch = line.match(/^(\d+\.)+/);
+      const numberedMatch = line.match(/^(\d+\.)+/)
       if (numberedMatch) {
-        const depth = (numberedMatch[0].match(/\d+/g) || []).length;
-        maxDepth = Math.max(maxDepth, depth);
+        const depth = (numberedMatch[0].match(/\d+/g) || []).length
+        maxDepth = Math.max(maxDepth, depth)
       }
 
       // Look for markdown-style headings
-      const hashMatch = line.match(/^#+\s/);
+      const hashMatch = line.match(/^#+\s/)
       if (hashMatch) {
-        const depth = (hashMatch[0].match(/#/g) || []).length;
-        maxDepth = Math.max(maxDepth, depth);
+        const depth = (hashMatch[0].match(/#/g) || []).length
+        maxDepth = Math.max(maxDepth, depth)
       }
     }
   }
 
-  return Math.min(maxDepth, 6); // Cap at 6 levels
+  return Math.min(maxDepth, 6) // Cap at 6 levels
 }
 
 /**
@@ -350,9 +349,9 @@ function detectCodePatterns(text: string): boolean {
     /class\s+\w+\s*[:{]/, // Class definitions
     /import\s+.*from/, // ES6 imports
     /<\/?[a-z][a-z0-9]*[^>]*>/i, // HTML tags
-  ];
+  ]
 
-  return patterns.some((pattern) => pattern.test(text));
+  return patterns.some(pattern => pattern.test(text))
 }
 
 /**
@@ -366,46 +365,46 @@ function detectMathPatterns(text: string): boolean {
     /\\sum|\\int|\\prod/, // LaTeX operators
     /[∑∫∏∂∇]/, // Unicode math symbols
     /[α-ωΑ-Ω]/, // Greek letters
-  ];
+  ]
 
-  return patterns.some((pattern) => pattern.test(text));
+  return patterns.some(pattern => pattern.test(text))
 }
 
 /**
  * Calculate overall complexity score (0-100).
  */
 function calculateComplexityScore(factors: ComplexityFactors): number {
-  let score = 0;
+  let score = 0
 
   // Page count contribution (0-40 points)
-  if (factors.pageCount > 100) score += 40;
-  else if (factors.pageCount > 50) score += 30;
-  else if (factors.pageCount > 20) score += 20;
-  else if (factors.pageCount > 5) score += 10;
-  else score += 5;
+  if (factors.pageCount > 100) score += 40
+  else if (factors.pageCount > 50) score += 30
+  else if (factors.pageCount > 20) score += 20
+  else if (factors.pageCount > 5) score += 10
+  else score += 5
 
   // Structure contribution (0-20 points)
-  if (factors.hasEmbeddedTOC) score += 10;
-  if (factors.structureDepth > 4) score += 10;
-  else if (factors.structureDepth > 2) score += 5;
+  if (factors.hasEmbeddedTOC) score += 10
+  if (factors.structureDepth > 4) score += 10
+  else if (factors.structureDepth > 2) score += 5
 
   // Content contribution (0-30 points)
-  if (factors.estimatedImages > 50) score += 12;
-  else if (factors.estimatedImages > 20) score += 8;
-  else if (factors.estimatedImages > 5) score += 4;
+  if (factors.estimatedImages > 50) score += 12
+  else if (factors.estimatedImages > 20) score += 8
+  else if (factors.estimatedImages > 5) score += 4
 
-  if (factors.estimatedTables > 10) score += 10;
-  else if (factors.estimatedTables > 3) score += 6;
-  else if (factors.estimatedTables > 0) score += 3;
+  if (factors.estimatedTables > 10) score += 10
+  else if (factors.estimatedTables > 3) score += 6
+  else if (factors.estimatedTables > 0) score += 3
 
-  if (factors.hasCodeBlocks) score += 4;
-  if (factors.hasMathFormulas) score += 4;
+  if (factors.hasCodeBlocks) score += 4
+  if (factors.hasMathFormulas) score += 4
 
   // Text density contribution (0-10 points)
-  if (factors.textDensity === 'dense') score += 10;
-  else if (factors.textDensity === 'normal') score += 5;
+  if (factors.textDensity === 'dense') score += 10
+  else if (factors.textDensity === 'normal') score += 5
 
-  return Math.min(100, score);
+  return Math.min(100, score)
 }
 
 /**
@@ -415,81 +414,81 @@ function determineComplexityLevel(
   score: number,
   factors: ComplexityFactors,
   moderateThreshold: number,
-  complexThreshold: number
+  complexThreshold: number,
 ): {
-  level: ComplexityLevel;
-  pipeline: PipelineType;
-  reasoning: string[];
+  level: ComplexityLevel
+  pipeline: PipelineType
+  reasoning: string[]
 } {
-  const reasoning: string[] = [];
+  const reasoning: string[] = []
 
   // Special case: very small documents
   if (factors.pageCount <= 3 && factors.estimatedImages <= 5 && !factors.hasEmbeddedTOC) {
-    reasoning.push(`Small document (${factors.pageCount} pages)`);
-    reasoning.push('No complex structure detected');
+    reasoning.push(`Small document (${factors.pageCount} pages)`)
+    reasoning.push('No complex structure detected')
     return {
       level: 'simple',
       pipeline: 'direct',
       reasoning,
-    };
+    }
   }
 
   // Special case: documents with TOC should use at least light pipeline
   if (factors.hasEmbeddedTOC && score < moderateThreshold) {
-    reasoning.push('Document has embedded TOC - using light pipeline for better structure');
+    reasoning.push('Document has embedded TOC - using light pipeline for better structure')
     return {
       level: 'moderate',
       pipeline: 'light',
       reasoning,
-    };
+    }
   }
 
   // Score-based classification
   if (score >= complexThreshold) {
-    reasoning.push(`High complexity score (${score}/100)`);
+    reasoning.push(`High complexity score (${score}/100)`)
 
     if (factors.pageCount > 50) {
-      reasoning.push(`Large document (${factors.pageCount} pages) requires windowed processing`);
+      reasoning.push(`Large document (${factors.pageCount} pages) requires windowed processing`)
     }
     if (factors.estimatedImages > 20) {
-      reasoning.push(`Many images (${factors.estimatedImages}) require careful extraction`);
+      reasoning.push(`Many images (${factors.estimatedImages}) require careful extraction`)
     }
     if (factors.structureDepth > 3) {
-      reasoning.push(`Deep heading hierarchy (${factors.structureDepth} levels)`);
+      reasoning.push(`Deep heading hierarchy (${factors.structureDepth} levels)`)
     }
 
     return {
       level: 'complex',
       pipeline: 'full',
       reasoning,
-    };
+    }
   }
 
   if (score >= moderateThreshold) {
-    reasoning.push(`Moderate complexity score (${score}/100)`);
+    reasoning.push(`Moderate complexity score (${score}/100)`)
 
     if (factors.pageCount > 10) {
-      reasoning.push(`Medium-sized document (${factors.pageCount} pages)`);
+      reasoning.push(`Medium-sized document (${factors.pageCount} pages)`)
     }
     if (factors.estimatedImages > 5) {
-      reasoning.push(`Contains images (${factors.estimatedImages})`);
+      reasoning.push(`Contains images (${factors.estimatedImages})`)
     }
 
     return {
       level: 'moderate',
       pipeline: 'light',
       reasoning,
-    };
+    }
   }
 
-  reasoning.push(`Low complexity score (${score}/100)`);
-  reasoning.push('Simple direct conversion recommended');
+  reasoning.push(`Low complexity score (${score}/100)`)
+  reasoning.push('Simple direct conversion recommended')
 
   return {
     level: 'simple',
     pipeline: 'direct',
     reasoning,
-  };
+  }
 }
 
 /**
@@ -497,38 +496,38 @@ function determineComplexityLevel(
  */
 function estimateProcessingTime(
   factors: ComplexityFactors,
-  pipeline: PipelineType
+  pipeline: PipelineType,
 ): number {
   // Base time per page (seconds)
   const baseTimePerPage = {
     direct: 3,
     light: 5,
     full: 8,
-  };
+  }
 
-  let time = factors.pageCount * baseTimePerPage[pipeline];
+  let time = factors.pageCount * baseTimePerPage[pipeline]
 
   // Add time for images
-  time += factors.estimatedImages * 0.5;
+  time += factors.estimatedImages * 0.5
 
   // Add time for tables
-  time += factors.estimatedTables * 2;
+  time += factors.estimatedTables * 2
 
   // Add overhead for structure extraction
   if (pipeline !== 'direct') {
-    time += 10; // Initial structure scan
+    time += 10 // Initial structure scan
   }
 
   // Add overhead for full pipeline
   if (pipeline === 'full') {
-    time += Math.ceil(factors.pageCount / 50) * 5; // Window processing overhead
+    time += Math.ceil(factors.pageCount / 50) * 5 // Window processing overhead
   }
 
-  return Math.round(time);
+  return Math.round(time)
 }
 
 // ============================================================================
 // Export Types
 // ============================================================================
 
-export type { PageSample };
+export type { PageSample }

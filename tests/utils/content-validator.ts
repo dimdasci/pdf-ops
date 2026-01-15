@@ -1,54 +1,54 @@
-import type { ImageInfo, TableInfo, CodeBlockInfo } from './markdown-parser';
+import type { CodeBlockInfo, ImageInfo, TableInfo } from './markdown-parser'
 
 export interface ContentExpectation {
   images: {
-    count: number;
-    minDimensions?: { width: number; height: number };
-  };
+    count: number
+    minDimensions?: { width: number; height: number }
+  }
   tables: {
-    count: number;
-    details?: Array<{ rows: number; columns: number }>;
-  };
+    count: number
+    details?: Array<{ rows: number; columns: number }>
+  }
   codeBlocks: {
-    count: number;
-    languages?: string[];
-  };
+    count: number
+    languages?: string[]
+  }
 }
 
 export interface ImageValidationDetail {
-  url: string;
-  valid: boolean;
-  reason?: string;
+  url: string
+  valid: boolean
+  reason?: string
 }
 
 export interface TableValidationDetail {
-  rows: number;
-  columns: number;
-  consistent: boolean;
+  rows: number
+  columns: number
+  consistent: boolean
 }
 
 export interface ContentValidationResult {
   images: {
-    count: number;
-    expected: number;
-    valid: boolean;
-    tolerance: number;
-    details: ImageValidationDetail[];
-  };
+    count: number
+    expected: number
+    valid: boolean
+    tolerance: number
+    details: ImageValidationDetail[]
+  }
   tables: {
-    count: number;
-    expected: number;
-    valid: boolean;
-    tolerance: number;
-    details: TableValidationDetail[];
-  };
+    count: number
+    expected: number
+    valid: boolean
+    tolerance: number
+    details: TableValidationDetail[]
+  }
   codeBlocks: {
-    count: number;
-    expected: number;
-    valid: boolean;
-    tolerance: number;
-    languages: string[];
-  };
+    count: number
+    expected: number
+    valid: boolean
+    tolerance: number
+    languages: string[]
+  }
 }
 
 /**
@@ -64,38 +64,38 @@ export function validateContent(
   tables: TableInfo[],
   codeBlocks: CodeBlockInfo[],
   expected: ContentExpectation,
-  tolerance: number = 1
+  tolerance: number = 1,
 ): ContentValidationResult {
   // Validate images
-  const imageDetails: ImageValidationDetail[] = images.map((img) => {
-    const valid = isValidImageUrl(img.url);
+  const imageDetails: ImageValidationDetail[] = images.map(img => {
+    const valid = isValidImageUrl(img.url)
     return {
       url: img.url.substring(0, 50) + (img.url.length > 50 ? '...' : ''),
       valid,
       reason: valid ? undefined : 'Invalid or empty URL',
-    };
-  });
+    }
+  })
 
-  const imageCountDiff = Math.abs(images.length - expected.images.count);
-  const imagesValid = imageCountDiff <= tolerance;
+  const imageCountDiff = Math.abs(images.length - expected.images.count)
+  const imagesValid = imageCountDiff <= tolerance
 
   // Validate tables
-  const tableDetails: TableValidationDetail[] = tables.map((table) => ({
+  const tableDetails: TableValidationDetail[] = tables.map(table => ({
     rows: table.rows,
     columns: table.columns,
     consistent: table.rows > 0 && table.columns > 0,
-  }));
+  }))
 
-  const tableCountDiff = Math.abs(tables.length - expected.tables.count);
-  const tablesValid = tableCountDiff <= tolerance;
+  const tableCountDiff = Math.abs(tables.length - expected.tables.count)
+  const tablesValid = tableCountDiff <= tolerance
 
   // Validate code blocks
   const languages = codeBlocks
-    .map((block) => block.language)
-    .filter((lang): lang is string => lang !== null);
+    .map(block => block.language)
+    .filter((lang): lang is string => lang !== null)
 
-  const codeCountDiff = Math.abs(codeBlocks.length - expected.codeBlocks.count);
-  const codeBlocksValid = codeCountDiff <= tolerance;
+  const codeCountDiff = Math.abs(codeBlocks.length - expected.codeBlocks.count)
+  const codeBlocksValid = codeCountDiff <= tolerance
 
   return {
     images: {
@@ -119,30 +119,32 @@ export function validateContent(
       tolerance,
       languages,
     },
-  };
+  }
 }
 
 /**
  * Check if an image URL is valid
  */
 function isValidImageUrl(url: string): boolean {
-  if (!url || url.trim() === '') return false;
+  if (!url || url.trim() === '') return false
 
   // Check for data URLs (base64 embedded images)
   if (url.startsWith('data:image/')) {
     // Basic check that it has some content
-    return url.length > 50;
+    return url.length > 50
   }
 
   // Check for regular URLs
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    return true;
+    return true
   }
 
   // Check for relative paths
-  if (url.startsWith('./') || url.startsWith('/') || url.match(/^\w+\.(png|jpg|jpeg|gif|webp|svg)$/i)) {
-    return true;
+  if (
+    url.startsWith('./') || url.startsWith('/') || url.match(/^\w+\.(png|jpg|jpeg|gif|webp|svg)$/i)
+  ) {
+    return true
   }
 
-  return false;
+  return false
 }

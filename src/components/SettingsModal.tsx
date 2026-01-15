@@ -1,118 +1,124 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Key, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Key, Loader2, Save, X } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface SettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onKeysChanged?: (keys: ApiKeys) => void;
+  isOpen: boolean
+  onClose: () => void
+  onKeysChanged?: (keys: ApiKeys) => void
 }
 
 interface ProviderStatus {
-  isValid: boolean | null;
-  isChecking: boolean;
+  isValid: boolean | null
+  isChecking: boolean
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onKeysChanged }) => {
-  const [geminiKey, setGeminiKey] = useState('');
-  const [anthropicKey, setAnthropicKey] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-  const [geminiStatus, setGeminiStatus] = useState<ProviderStatus>({ isValid: null, isChecking: false });
-  const [anthropicStatus, setAnthropicStatus] = useState<ProviderStatus>({ isValid: null, isChecking: false });
+  const [geminiKey, setGeminiKey] = useState('')
+  const [anthropicKey, setAnthropicKey] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [geminiStatus, setGeminiStatus] = useState<ProviderStatus>({
+    isValid: null,
+    isChecking: false,
+  })
+  const [anthropicStatus, setAnthropicStatus] = useState<ProviderStatus>({
+    isValid: null,
+    isChecking: false,
+  })
 
   useEffect(() => {
     if (isOpen) {
-      loadApiKeys();
+      loadApiKeys()
     }
-  }, [isOpen]);
+  }, [isOpen])
 
   const loadApiKeys = async () => {
     if (window.electronAPI) {
       try {
-        const keys = await window.electronAPI.getApiKeys();
-        if (keys.gemini) setGeminiKey(keys.gemini);
-        if (keys.anthropic) setAnthropicKey(keys.anthropic);
+        const keys = await window.electronAPI.getApiKeys()
+        if (keys.gemini) setGeminiKey(keys.gemini)
+        if (keys.anthropic) setAnthropicKey(keys.anthropic)
       } catch (e) {
-        console.error('Failed to load API keys:', e);
+        console.error('Failed to load API keys:', e)
       }
     }
-  };
+  }
 
   const handleSave = async () => {
     if (!window.electronAPI) {
-      console.error('Electron API not available');
-      return;
+      console.error('Electron API not available')
+      return
     }
 
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const keys: ApiKeys = {};
-      if (geminiKey) keys.gemini = geminiKey;
-      if (anthropicKey) keys.anthropic = anthropicKey;
+      const keys: ApiKeys = {}
+      if (geminiKey) keys.gemini = geminiKey
+      if (anthropicKey) keys.anthropic = anthropicKey
 
-      await window.electronAPI.saveApiKeys(keys);
-      setIsSaved(true);
-      setTimeout(() => setIsSaved(false), 2000);
+      await window.electronAPI.saveApiKeys(keys)
+      setIsSaved(true)
+      setTimeout(() => setIsSaved(false), 2000)
 
       // Notify parent of changes
-      onKeysChanged?.(keys);
+      onKeysChanged?.(keys)
     } catch (error) {
-      console.error('Failed to save keys:', error);
+      console.error('Failed to save keys:', error)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const validateGeminiKey = async () => {
-    if (!geminiKey) return;
-    setGeminiStatus({ isValid: null, isChecking: true });
+    if (!geminiKey) return
+    setGeminiStatus({ isValid: null, isChecking: true })
 
     try {
       // Simple validation by attempting a minimal API call
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(geminiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      await model.generateContent('test');
-      setGeminiStatus({ isValid: true, isChecking: false });
+      const { GoogleGenerativeAI } = await import('@google/generative-ai')
+      const genAI = new GoogleGenerativeAI(geminiKey)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+      await model.generateContent('test')
+      setGeminiStatus({ isValid: true, isChecking: false })
     } catch {
-      setGeminiStatus({ isValid: false, isChecking: false });
+      setGeminiStatus({ isValid: false, isChecking: false })
     }
-  };
+  }
 
   const validateAnthropicKey = async () => {
-    if (!anthropicKey) return;
-    setAnthropicStatus({ isValid: null, isChecking: true });
+    if (!anthropicKey) return
+    setAnthropicStatus({ isValid: null, isChecking: true })
 
     try {
       // Import Anthropic SDK dynamically
-      const Anthropic = (await import('@anthropic-ai/sdk')).default;
-      const client = new Anthropic({ apiKey: anthropicKey, dangerouslyAllowBrowser: true });
+      const Anthropic = (await import('@anthropic-ai/sdk')).default
+      const client = new Anthropic({ apiKey: anthropicKey, dangerouslyAllowBrowser: true })
       await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 10,
         messages: [{ role: 'user', content: 'test' }],
-      });
-      setAnthropicStatus({ isValid: true, isChecking: false });
+      })
+      setAnthropicStatus({ isValid: true, isChecking: false })
     } catch {
-      setAnthropicStatus({ isValid: false, isChecking: false });
+      setAnthropicStatus({ isValid: false, isChecking: false })
     }
-  };
+  }
 
   const renderStatusIcon = (status: ProviderStatus) => {
     if (status.isChecking) {
-      return <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />;
+      return <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
     }
     if (status.isValid === true) {
-      return <CheckCircle className="w-4 h-4 text-green-400" />;
+      return <CheckCircle className="w-4 h-4 text-green-400" />
     }
     if (status.isValid === false) {
-      return <AlertCircle className="w-4 h-4 text-red-400" />;
+      return <AlertCircle className="w-4 h-4 text-red-400" />
     }
-    return null;
-  };
+    return null
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -148,9 +154,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             <input
               type="password"
               value={geminiKey}
-              onChange={(e) => {
-                setGeminiKey(e.target.value);
-                setGeminiStatus({ isValid: null, isChecking: false });
+              onChange={e => {
+                setGeminiKey(e.target.value)
+                setGeminiStatus({ isValid: null, isChecking: false })
               }}
               placeholder="Enter your Gemini API key..."
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
@@ -180,9 +186,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             <input
               type="password"
               value={anthropicKey}
-              onChange={(e) => {
-                setAnthropicKey(e.target.value);
-                setAnthropicStatus({ isValid: null, isChecking: false });
+              onChange={e => {
+                setAnthropicKey(e.target.value)
+                setAnthropicStatus({ isValid: null, isChecking: false })
               }}
               placeholder="Enter your Anthropic API key..."
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
@@ -194,8 +200,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
           <div className="border-t border-zinc-800 pt-4">
             <p className="text-xs text-zinc-500 mb-4">
-              Your keys are stored securely on your local device using encrypted storage.
-              At least one API key is required for document conversion.
+              Your keys are stored securely on your local device using encrypted storage. At least
+              one API key is required for document conversion.
             </p>
 
             <div className="flex justify-end gap-3">
@@ -210,28 +216,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 disabled={isLoading || (!geminiKey && !anthropicKey)}
                 className={`
                   flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
-                  ${isSaved
+                  ${
+                  isSaved
                     ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'}
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20'
+                }
                   disabled:opacity-50 disabled:cursor-not-allowed
                 `}
               >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : isSaved ? (
-                  <>Saved!</>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Save Keys
-                  </>
-                )}
+                {isLoading
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : isSaved
+                  ? <>Saved!</>
+                  : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Save Keys
+                    </>
+                  )}
               </button>
             </div>
           </div>
         </div>
       </div>
     </div>,
-    document.body
-  );
-};
+    document.body,
+  )
+}

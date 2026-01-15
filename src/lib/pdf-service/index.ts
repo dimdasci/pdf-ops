@@ -4,9 +4,9 @@
  * Provides a unified way to create PDF services for different environments.
  */
 
-import type { PdfService } from './types';
+import type { PdfService } from './types'
 
-export type PdfServiceEnvironment = 'browser' | 'node';
+export type PdfServiceEnvironment = 'browser' | 'node'
 
 /**
  * Create a PDF service instance for the specified environment.
@@ -33,18 +33,18 @@ export type PdfServiceEnvironment = 'browser' | 'node';
  */
 export async function createPdfService(
   data: Uint8Array,
-  environment: PdfServiceEnvironment
+  environment: PdfServiceEnvironment,
 ): Promise<PdfService> {
   if (environment === 'node') {
-    const { NodePdfService } = await import('./node');
-    const service = new NodePdfService();
-    await service.load(data);
-    return service;
+    const { NodePdfService } = await import('./node')
+    const service = new NodePdfService()
+    await service.load(data)
+    return service
   } else {
-    const { BrowserPdfService } = await import('./browser');
-    const service = new BrowserPdfService();
-    await service.load(data);
-    return service;
+    const { BrowserPdfService } = await import('./browser')
+    const service = new BrowserPdfService()
+    await service.load(data)
+    return service
   }
 }
 
@@ -56,13 +56,13 @@ export async function createPdfService(
 export function detectEnvironment(): PdfServiceEnvironment {
   // Check for Node.js-specific globals
   if (
-    typeof process !== 'undefined' &&
-    process.versions != null &&
-    process.versions.node != null
+    typeof process !== 'undefined'
+    && process.versions != null
+    && process.versions.node != null
   ) {
-    return 'node';
+    return 'node'
   }
-  return 'browser';
+  return 'browser'
 }
 
 /**
@@ -72,8 +72,8 @@ export function detectEnvironment(): PdfServiceEnvironment {
  * @returns Initialized PdfService instance
  */
 export async function createPdfServiceAuto(data: Uint8Array): Promise<PdfService> {
-  return createPdfService(data, detectEnvironment());
+  return createPdfService(data, detectEnvironment())
 }
 
 // Re-export types
-export * from './types';
+export * from './types'

@@ -1,8 +1,8 @@
-import stringSimilarity from 'string-similarity';
+import stringSimilarity from 'string-similarity'
 
 export interface FuzzyMatchResult {
-  similarity: number;
-  passed: boolean;
+  similarity: number
+  passed: boolean
 }
 
 /**
@@ -14,21 +14,21 @@ export interface FuzzyMatchResult {
 export function fuzzyMatch(
   actual: string,
   expected: string,
-  threshold: number = 0.9
+  threshold: number = 0.9,
 ): FuzzyMatchResult {
   // Normalize strings for comparison
-  const normalizedActual = normalizeString(actual);
-  const normalizedExpected = normalizeString(expected);
+  const normalizedActual = normalizeString(actual)
+  const normalizedExpected = normalizeString(expected)
 
   const similarity = stringSimilarity.compareTwoStrings(
     normalizedActual,
-    normalizedExpected
-  );
+    normalizedExpected,
+  )
 
   return {
     similarity,
     passed: similarity >= threshold,
-  };
+  }
 }
 
 /**
@@ -42,5 +42,5 @@ function normalizeString(str: string): string {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .replace(/[^\w\s]/g, '')
-    .trim();
+    .trim()
 }

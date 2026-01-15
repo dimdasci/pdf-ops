@@ -5,32 +5,28 @@
  * rate limiting, and error recovery.
  */
 
-import type { PdfService } from '../pdf-service/types';
-import type { LLMProvider } from '../llm/types';
+import type { LLMProvider } from '../llm/types'
+import type { PdfService } from '../pdf-service/types'
 import {
-  convertDocument,
-  type ConversionOptions,
-  type ConversionResult,
-} from './index';
-import {
-  Effect,
+  APIError,
+  createRateLimiter,
+  DEFAULT_RATE_LIMIT_CONFIG,
+  DEFAULT_RETRY_CONFIG,
   Duration,
+  Effect,
   pipe,
+  type PipelineError,
+  processWithConcurrency,
+  type RateLimitConfig,
+  type RateLimiter,
+  RateLimitError,
+  type RetryConfig,
+  runEffect,
+  TimeoutError,
   withRetry,
   withRobustness,
-  createRateLimiter,
-  processWithConcurrency,
-  runEffect,
-  type RetryConfig,
-  type RateLimitConfig,
-  type PipelineError,
-  type RateLimiter,
-  DEFAULT_RETRY_CONFIG,
-  DEFAULT_RATE_LIMIT_CONFIG,
-  APIError,
-  RateLimitError,
-  TimeoutError,
-} from './effect-wrapper';
+} from './effect-wrapper'
+import { type ConversionOptions, type ConversionResult, convertDocument } from './index'
 
 // ============================================================================
 // Types
@@ -38,26 +34,26 @@ import {
 
 export interface RobustConversionOptions extends ConversionOptions {
   /** Retry configuration for API calls */
-  retryConfig?: RetryConfig;
+  retryConfig?: RetryConfig
   /** Rate limit configuration */
-  rateLimitConfig?: RateLimitConfig;
+  rateLimitConfig?: RateLimitConfig
   /** Timeout for the entire conversion */
-  timeout?: Duration.DurationInput;
+  timeout?: Duration.DurationInput
   /** Whether to continue on partial failure */
-  continueOnError?: boolean;
+  continueOnError?: boolean
   /** Error callback */
-  onError?: (error: PipelineError, context: string) => void;
+  onError?: (error: PipelineError, context: string) => void
 }
 
 export interface RobustConversionResult extends ConversionResult {
   /** Errors encountered during conversion */
   errors: Array<{
-    context: string;
-    error: PipelineError;
-    recovered: boolean;
-  }>;
+    context: string
+    error: PipelineError
+    recovered: boolean
+  }>
   /** Whether conversion completed with full success */
-  fullSuccess: boolean;
+  fullSuccess: boolean
 }
 
 // ============================================================================
@@ -76,7 +72,7 @@ export interface RobustConversionResult extends ConversionResult {
 export async function convertDocumentRobust(
   pdfService: PdfService,
   provider: LLMProvider,
-  options: RobustConversionOptions = {}
+  options: RobustConversionOptions = {},
 ): Promise<RobustConversionResult> {
   const {
     retryConfig = DEFAULT_RETRY_CONFIG,
@@ -85,12 +81,12 @@ export async function convertDocumentRobust(
     continueOnError = true,
     onError,
     ...conversionOptions
-  } = options;
+  } = options
 
-  const errors: RobustConversionResult['errors'] = [];
+  const errors: RobustConversionResult['errors'] = []
 
   // Create rate limiter
-  const rateLimiter = await runEffect(createRateLimiter(rateLimitConfig));
+  const rateLimiter = await runEffect(createRateLimiter(rateLimitConfig))
 
   // Wrap the conversion with robustness
   const robustConversion = withRobustness(
@@ -101,38 +97,38 @@ export async function convertDocumentRobust(
         rateLimiter,
         retryConfig,
         (error, context) => {
-          errors.push({ context, error, recovered: continueOnError });
-          onError?.(error, context);
-        }
-      );
+          errors.push({ context, error, recovered: continueOnError })
+          onError?.(error, context)
+        },
+      )
 
-      return convertDocument(pdfService, robustProvider, conversionOptions);
+      return convertDocument(pdfService, robustProvider, conversionOptions)
     },
     {
       retryConfig,
       timeout,
-    }
-  );
+    },
+  )
 
   try {
-    const result = await runEffect(robustConversion);
+    const result = await runEffect(robustConversion)
     return {
       ...result,
       errors,
       fullSuccess: errors.length === 0,
-    };
+    }
   } catch (error) {
     // If the entire conversion fails, return partial result
     if (continueOnError) {
       const pipelineError = error instanceof Error
         ? new APIError(error.message)
-        : new APIError(String(error));
+        : new APIError(String(error))
 
       errors.push({
         context: 'conversion',
         error: pipelineError,
         recovered: false,
-      });
+      })
 
       return {
         markdown: '',
@@ -166,9 +162,9 @@ export async function convertDocumentRobust(
         },
         errors,
         fullSuccess: false,
-      };
+      }
     }
-    throw error;
+    throw error
   }
 }
 
@@ -183,12 +179,12 @@ function createRobustProvider(
   provider: LLMProvider,
   rateLimiter: RateLimiter,
   retryConfig: RetryConfig,
-  onError: (error: PipelineError, context: string) => void
+  onError: (error: PipelineError, context: string) => void,
 ): LLMProvider {
   const wrapMethod = <T extends unknown[], R>(
     method: (...args: T) => Promise<R>,
-    context: string
-  ): ((...args: T) => Promise<R>) => {
+    context: string,
+  ): (...args: T) => Promise<R> => {
     return async (...args: T): Promise<R> => {
       const effect = withRobustness(
         () => method.apply(provider, args),
@@ -196,47 +192,47 @@ function createRobustProvider(
           retryConfig,
           rateLimiter,
           timeout: '2 minutes',
-        }
-      );
+        },
+      )
 
       try {
-        return await runEffect(effect);
+        return await runEffect(effect)
       } catch (error) {
-        const pipelineError = error instanceof APIError ||
-          error instanceof RateLimitError ||
-          error instanceof TimeoutError
+        const pipelineError = error instanceof APIError
+            || error instanceof RateLimitError
+            || error instanceof TimeoutError
           ? error
-          : new APIError(error instanceof Error ? error.message : String(error));
+          : new APIError(error instanceof Error ? error.message : String(error))
 
-        onError(pipelineError, context);
-        throw error;
+        onError(pipelineError, context)
+        throw error
       }
-    };
-  };
+    }
+  }
 
   return {
     ...provider,
     analyzeDocument: wrapMethod(
       provider.analyzeDocument.bind(provider),
-      'analyzeDocument'
+      'analyzeDocument',
     ),
     extractStructure: wrapMethod(
       provider.extractStructure.bind(provider),
-      'extractStructure'
+      'extractStructure',
     ),
     convertPage: wrapMethod(
       provider.convertPage.bind(provider),
-      'convertPage'
+      'convertPage',
     ),
     convertWindow: wrapMethod(
       provider.convertWindow.bind(provider),
-      'convertWindow'
+      'convertWindow',
     ),
     summarize: wrapMethod(
       provider.summarize.bind(provider),
-      'summarize'
+      'summarize',
     ),
-  };
+  }
 }
 
 // ============================================================================
@@ -247,17 +243,17 @@ function createRobustProvider(
  * Process multiple pages with controlled concurrency and error recovery.
  */
 export async function processPagesBatch(
-  pdfService: PdfService,
-  provider: LLMProvider,
+  _pdfService: PdfService,
+  _provider: LLMProvider,
   pageNumbers: number[],
   processor: (pageNum: number) => Promise<string>,
   options: {
-    concurrency?: number;
-    retryConfig?: RetryConfig;
-    onProgress?: (completed: number, total: number) => void;
-    onPageError?: (pageNum: number, error: PipelineError) => void;
-    continueOnError?: boolean;
-  } = {}
+    concurrency?: number
+    retryConfig?: RetryConfig
+    onProgress?: (completed: number, total: number) => void
+    onPageError?: (pageNum: number, error: PipelineError) => void
+    continueOnError?: boolean
+  } = {},
 ): Promise<Array<{ pageNum: number; content: string; error?: PipelineError }>> {
   const {
     concurrency = 3,
@@ -265,37 +261,37 @@ export async function processPagesBatch(
     onProgress,
     onPageError,
     continueOnError = true,
-  } = options;
+  } = options
 
   const effect = processWithConcurrency(
     pageNumbers,
-    async (pageNum, index) => {
+    async (pageNum, _index) => {
       try {
-        const content = await processor(pageNum);
-        return { pageNum, content };
+        const content = await processor(pageNum)
+        return { pageNum, content }
       } catch (error) {
-        const pipelineError = error instanceof APIError ||
-          error instanceof RateLimitError ||
-          error instanceof TimeoutError
+        const pipelineError = error instanceof APIError
+            || error instanceof RateLimitError
+            || error instanceof TimeoutError
           ? error
-          : new APIError(error instanceof Error ? error.message : String(error));
+          : new APIError(error instanceof Error ? error.message : String(error))
 
-        onPageError?.(pageNum, pipelineError);
+        onPageError?.(pageNum, pipelineError)
 
         if (continueOnError) {
-          return { pageNum, content: '', error: pipelineError };
+          return { pageNum, content: '', error: pipelineError }
         }
-        throw error;
+        throw error
       }
     },
     {
       concurrency,
       retryConfig,
       onProgress,
-    }
-  );
+    },
+  )
 
-  return runEffect(effect);
+  return runEffect(effect)
 }
 
 // ============================================================================
@@ -303,12 +299,12 @@ export async function processPagesBatch(
 // ============================================================================
 
 export interface WindowProcessingOptions {
-  concurrency?: number;
-  retryConfig?: RetryConfig;
-  delayBetweenWindows?: number;
-  onProgress?: (windowNum: number, totalWindows: number) => void;
-  onWindowError?: (windowNum: number, error: PipelineError) => void;
-  continueOnError?: boolean;
+  concurrency?: number
+  retryConfig?: RetryConfig
+  delayBetweenWindows?: number
+  onProgress?: (windowNum: number, totalWindows: number) => void
+  onWindowError?: (windowNum: number, error: PipelineError) => void
+  continueOnError?: boolean
 }
 
 /**
@@ -317,7 +313,7 @@ export interface WindowProcessingOptions {
 export async function processWindowsRobust<T>(
   windows: Array<{ windowNum: number; data: T }>,
   processor: (window: { windowNum: number; data: T }) => Promise<string>,
-  options: WindowProcessingOptions = {}
+  options: WindowProcessingOptions = {},
 ): Promise<Array<{ windowNum: number; content: string; error?: PipelineError }>> {
   const {
     concurrency = 2,
@@ -326,19 +322,19 @@ export async function processWindowsRobust<T>(
     onProgress,
     onWindowError,
     continueOnError = true,
-  } = options;
+  } = options
 
-  const results: Array<{ windowNum: number; content: string; error?: PipelineError }> = [];
+  const results: Array<{ windowNum: number; content: string; error?: PipelineError }> = []
 
-  const effect = Effect.gen(function* () {
-    const semaphore = yield* Effect.makeSemaphore(concurrency);
+  const effect = Effect.gen(function*() {
+    const semaphore = yield* Effect.makeSemaphore(concurrency)
 
     for (let i = 0; i < windows.length; i++) {
-      const window = windows[i];
+      const window = windows[i]
 
       // Add delay between windows (except for first)
       if (i > 0 && delayBetweenWindows > 0) {
-        yield* Effect.sleep(Duration.millis(delayBetweenWindows));
+        yield* Effect.sleep(Duration.millis(delayBetweenWindows))
       }
 
       // Process with semaphore
@@ -346,36 +342,36 @@ export async function processWindowsRobust<T>(
         pipe(
           withRetry(
             () => processor(window),
-            retryConfig
+            retryConfig,
           ),
-          Effect.map((content) => ({
+          Effect.map(content => ({
             windowNum: window.windowNum,
             content,
           })),
-          Effect.catchAll((error) => {
-            const pipelineError = error as PipelineError;
-            onWindowError?.(window.windowNum, pipelineError);
+          Effect.catchAll(error => {
+            const pipelineError = error as PipelineError
+            onWindowError?.(window.windowNum, pipelineError)
 
             if (continueOnError) {
               return Effect.succeed({
                 windowNum: window.windowNum,
                 content: '',
                 error: pipelineError,
-              });
+              })
             }
-            return Effect.fail(error);
-          })
-        )
-      );
+            return Effect.fail(error)
+          }),
+        ),
+      )
 
-      results.push(result);
-      onProgress?.(i + 1, windows.length);
+      results.push(result)
+      onProgress?.(i + 1, windows.length)
     }
 
-    return results;
-  });
+    return results
+  })
 
-  return runEffect(effect as Effect.Effect<typeof results, never>);
+  return runEffect(effect as Effect.Effect<typeof results, never>)
 }
 
 // ============================================================================
@@ -383,24 +379,19 @@ export async function processWindowsRobust<T>(
 // ============================================================================
 
 export {
+  // Re-export error types
+  APIError,
+  createRateLimiter,
+  DEFAULT_RATE_LIMIT_CONFIG,
+  // Re-export config defaults
+  DEFAULT_RETRY_CONFIG,
+  processWithConcurrency,
+  RateLimitError,
+  runEffect,
+  TimeoutError,
   // Re-export Effect utilities
   withRetry,
   withRobustness,
-  createRateLimiter,
-  processWithConcurrency,
-  runEffect,
-  // Re-export error types
-  APIError,
-  RateLimitError,
-  TimeoutError,
-  // Re-export config defaults
-  DEFAULT_RETRY_CONFIG,
-  DEFAULT_RATE_LIMIT_CONFIG,
-};
+}
 
-export type {
-  RetryConfig,
-  RateLimitConfig,
-  PipelineError,
-  RateLimiter,
-};
+export type { PipelineError, RateLimitConfig, RateLimiter, RetryConfig }

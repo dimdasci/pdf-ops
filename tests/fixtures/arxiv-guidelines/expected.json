@@ -25,7 +25,10 @@
         { "level": 2, "text": "Guideline 6: Make Peer Code Review a Standard Practice" },
         { "level": 2, "text": "Guideline 7: Document Everything" },
         { "level": 2, "text": "Guideline 8: Strive for Reproducibility" },
-        { "level": 2, "text": "Guideline 9: Pay Attention to Performance and Scalability, as Necessary" },
+        {
+          "level": 2,
+          "text": "Guideline 9: Pay Attention to Performance and Scalability, as Necessary"
+        },
         { "level": 2, "text": "Guideline 10: Plan for Long-Term Maintenance" },
         { "level": 1, "text": "Conclusion" },
         { "level": 1, "text": "Acknowledgments" },

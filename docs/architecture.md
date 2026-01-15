@@ -94,37 +94,40 @@ tests/
 
 ```typescript
 interface LLMProvider {
-  readonly name: string;           // 'claude' | 'gemini'
-  readonly displayName: string;    // UI display name
-  readonly capabilities: ProviderCapabilities;
+  readonly name: string // 'claude' | 'gemini'
+  readonly displayName: string // UI display name
+  readonly capabilities: ProviderCapabilities
 
   // Document-level operations
-  analyzeDocument(pdfData: Uint8Array | string): Promise<DocumentAnalysis>;
-  extractStructure(pdfData: Uint8Array | string, analysis: DocumentAnalysis): Promise<DocumentStructure>;
+  analyzeDocument(pdfData: Uint8Array | string): Promise<DocumentAnalysis>
+  extractStructure(
+    pdfData: Uint8Array | string,
+    analysis: DocumentAnalysis,
+  ): Promise<DocumentStructure>
 
   // Page-level operations
-  convertPage(imageBase64: string, context: PageContext): Promise<PageConversionResult>;
-  convertWindow(pdfData: Uint8Array | string, context: WindowContext): Promise<WindowResult>;
+  convertPage(imageBase64: string, context: PageContext): Promise<PageConversionResult>
+  convertWindow(pdfData: Uint8Array | string, context: WindowContext): Promise<WindowResult>
 
   // Utilities
-  classifyImage(imageBase64: string): Promise<ImageClassification>;
-  summarize(content: string, maxLength?: number): Promise<string>;
-  chat(prompt: string): Promise<string>;
-  validateConnection(): Promise<boolean>;
-  estimateCost(pageCount: number, complexity: number): number;
+  classifyImage(imageBase64: string): Promise<ImageClassification>
+  summarize(content: string, maxLength?: number): Promise<string>
+  chat(prompt: string): Promise<string>
+  validateConnection(): Promise<boolean>
+  estimateCost(pageCount: number, complexity: number): number
 }
 ```
 
 ### Provider Comparison
 
-| Feature | Claude | Gemini |
-|---------|--------|--------|
-| Native PDF support | Yes (up to 100 pages) | No (requires image rendering) |
-| Models | claude-sonnet-4-5-20250929 (complex), claude-haiku-4-5-20251001 (simple) | gemini-2.5-flash |
-| RECITATION filter | No | Yes (blocks copyrighted content) |
-| Context window | 200K tokens | 2M tokens |
-| Cost per page | ~$0.01-0.02 | ~$0.001 |
-| Structure extraction | Excellent (semantic) | Good (visual inference) |
+| Feature              | Claude                                                                   | Gemini                           |
+| -------------------- | ------------------------------------------------------------------------ | -------------------------------- |
+| Native PDF support   | Yes (up to 100 pages)                                                    | No (requires image rendering)    |
+| Models               | claude-sonnet-4-5-20250929 (complex), claude-haiku-4-5-20251001 (simple) | gemini-2.5-flash                 |
+| RECITATION filter    | No                                                                       | Yes (blocks copyrighted content) |
+| Context window       | 200K tokens                                                              | 2M tokens                        |
+| Cost per page        | ~$0.01-0.02                                                              | ~$0.001                          |
+| Structure extraction | Excellent (semantic)                                                     | Good (visual inference)          |
 
 ### Provider Selection
 
@@ -133,10 +136,10 @@ interface LLMProvider {
 const registry = new ProviderRegistry({
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   geminiApiKey: process.env.GEMINI_API_KEY,
-});
+})
 
-const availableProviders = registry.getAvailable(); // ['claude', 'gemini']
-const provider = registry.get('claude');
+const availableProviders = registry.getAvailable() // ['claude', 'gemini']
+const provider = registry.get('claude')
 ```
 
 ## Pipeline Architecture
@@ -147,29 +150,29 @@ Before processing, documents are analyzed to determine optimal pipeline:
 
 ```typescript
 interface DocumentComplexity {
-  level: 'simple' | 'moderate' | 'complex';
-  score: number; // 0-100
+  level: 'simple' | 'moderate' | 'complex'
+  score: number // 0-100
   factors: {
-    pageCount: number;
-    hasEmbeddedTOC: boolean;
-    estimatedImages: number;
-    estimatedTables: number;
-    hasVectorGraphics: boolean;
-    textDensity: 'sparse' | 'normal' | 'dense';
-    structureDepth: number;
-  };
-  recommendedPipeline: 'direct' | 'light' | 'full';
-  estimatedTimeSeconds: number;
+    pageCount: number
+    hasEmbeddedTOC: boolean
+    estimatedImages: number
+    estimatedTables: number
+    hasVectorGraphics: boolean
+    textDensity: 'sparse' | 'normal' | 'dense'
+    structureDepth: number
+  }
+  recommendedPipeline: 'direct' | 'light' | 'full'
+  estimatedTimeSeconds: number
 }
 ```
 
 ### Pipeline Selection
 
-| Pipeline | Complexity | Pages | Description |
-|----------|------------|-------|-------------|
-| **Direct** | Simple (0-20) | 1-5 | Single-pass, page-by-page conversion. No structure extraction. |
-| **Light** | Moderate (20-60) | 5-50 | Quick structure scan, then sequential conversion with context. |
-| **Full** | Complex (60-100) | 50+ | Multi-pass: global scan, structure extraction, windowed conversion. |
+| Pipeline   | Complexity       | Pages | Description                                                         |
+| ---------- | ---------------- | ----- | ------------------------------------------------------------------- |
+| **Direct** | Simple (0-20)    | 1-5   | Single-pass, page-by-page conversion. No structure extraction.      |
+| **Light**  | Moderate (20-60) | 5-50  | Quick structure scan, then sequential conversion with context.      |
+| **Full**   | Complex (60-100) | 50+   | Multi-pass: global scan, structure extraction, windowed conversion. |
 
 ### Pipeline Flow
 
@@ -196,20 +199,20 @@ interface DocumentComplexity {
 ```typescript
 // 1-5 pages, no TOC, minimal structure
 async function runDirectPipeline(pdfService, provider, options) {
-  const pageCount = pdfService.getPageCount();
-  const results = [];
+  const pageCount = pdfService.getPageCount()
+  const results = []
 
   for (let page = 1; page <= pageCount; page++) {
-    const image = await pdfService.renderPage(page, { dpi: options.dpi });
+    const image = await pdfService.renderPage(page, { dpi: options.dpi })
     const result = await provider.convertPage(image, {
       pageNumber: page,
       totalPages: pageCount,
       previousContent: results[page - 2]?.content || '',
-    });
-    results.push(result);
+    })
+    results.push(result)
   }
 
-  return mergeResults(results);
+  return mergeResults(results)
 }
 ```
 
@@ -219,27 +222,27 @@ async function runDirectPipeline(pdfService, provider, options) {
 // 5-50 pages, some structure
 async function runLightPipeline(pdfService, provider, options) {
   // Pass 1: Quick document analysis (text-only)
-  const text = await getAllPageText(pdfService);
-  const analysis = await provider.analyzeDocument(text);
+  const text = await getAllPageText(pdfService)
+  const analysis = await provider.analyzeDocument(text)
 
   // Pass 2: Extract structure (headings, sections)
-  const structure = await provider.extractStructure(text, analysis);
+  const structure = await provider.extractStructure(text, analysis)
 
   // Pass 3: Sequential conversion with structure hints
-  const results = [];
+  const results = []
   for (let page = 1; page <= pageCount; page++) {
-    const image = await pdfService.renderPage(page);
+    const image = await pdfService.renderPage(page)
     const result = await provider.convertPage(image, {
       pageNumber: page,
       expectedHeadings: structure.headingsByPage.get(page) || [],
       headerPattern: analysis.headerPattern,
       footerPattern: analysis.footerPattern,
       // ... more context
-    });
-    results.push(result);
+    })
+    results.push(result)
   }
 
-  return mergeResults(results, structure);
+  return mergeResults(results, structure)
 }
 ```
 
@@ -276,48 +279,48 @@ async function runFullPipeline(pdfService, provider, options) {
 ```typescript
 interface PdfService {
   // Lifecycle
-  load(data: Uint8Array): Promise<void>;
-  destroy(): void;
+  load(data: Uint8Array): Promise<void>
+  destroy(): void
 
   // Metadata
-  getPageCount(): number;
-  getMetadata(): Promise<PdfMetadata>;
-  getOutline(): Promise<OutlineItem[] | null>;
+  getPageCount(): number
+  getMetadata(): Promise<PdfMetadata>
+  getOutline(): Promise<OutlineItem[] | null>
 
   // Rendering
-  renderPage(pageNum: number, options?: RenderOptions): Promise<string>;
-  cropImage(base64Image: string, options: CropOptions): Promise<string>;
+  renderPage(pageNum: number, options?: RenderOptions): Promise<string>
+  cropImage(base64Image: string, options: CropOptions): Promise<string>
 
   // Text extraction
-  getPageText(pageNum: number): Promise<string>;
+  getPageText(pageNum: number): Promise<string>
 
   // Page manipulation
-  extractPageRange(startPage: number, endPage: number): Promise<Uint8Array>;
+  extractPageRange(startPage: number, endPage: number): Promise<Uint8Array>
 
   // Image extraction
-  getPageImages(pageNum: number): Promise<EmbeddedImage[]>;
+  getPageImages(pageNum: number): Promise<EmbeddedImage[]>
 
   // Vector graphics (optional)
-  detectVectorRegions?(pageNum: number): Promise<VectorRegion[]>;
-  renderAsSvg?(pageNum: number, region?: VectorRegion): Promise<string>;
-  renderRegion?(pageNum: number, region: VectorRegion, scale?: number): Promise<string>;
+  detectVectorRegions?(pageNum: number): Promise<VectorRegion[]>
+  renderAsSvg?(pageNum: number, region?: VectorRegion): Promise<string>
+  renderRegion?(pageNum: number, region: VectorRegion, scale?: number): Promise<string>
 }
 ```
 
 ### Environment-Specific Implementations
 
-| Method | Browser (BrowserPdfService) | Node.js (NodePdfService) |
-|--------|----------------------------|--------------------------|
-| PDF parsing | pdf.js | pdf.js |
-| Canvas rendering | HTMLCanvasElement | @napi-rs/canvas |
-| Image cropping | browser canvas | @napi-rs/canvas |
-| Page extraction | pdf-lib | pdf-lib |
+| Method           | Browser (BrowserPdfService) | Node.js (NodePdfService) |
+| ---------------- | --------------------------- | ------------------------ |
+| PDF parsing      | pdf.js                      | pdf.js                   |
+| Canvas rendering | HTMLCanvasElement           | @napi-rs/canvas          |
+| Image cropping   | browser canvas              | @napi-rs/canvas          |
+| Page extraction  | pdf-lib                     | pdf-lib                  |
 
 ### Factory Pattern
 
 ```typescript
 // Create appropriate service based on environment
-const pdfService = await createPdfService(pdfBuffer, 'node'); // or 'browser'
+const pdfService = await createPdfService(pdfBuffer, 'node') // or 'browser'
 ```
 
 ## Robust Pipeline (Effect.ts)
@@ -339,12 +342,13 @@ const result = await convertDocumentRobust(pdfService, provider, {
   continueOnError: true,
   onProgress: (status, current, total) => console.log(status),
   onError: (error, context) => console.error(context, error),
-});
+})
 ```
 
 ## Vector Graphics Detection
 
 PDFs contain two types of graphics:
+
 1. **Raster images**: Embedded JPEG/PNG (easy to extract)
 2. **Vector graphics**: Drawn with PDF operators (paths, fills, strokes)
 
@@ -391,9 +395,9 @@ API keys are stored securely using `electron-store` with encryption:
 
 ```typescript
 interface Settings {
-  geminiApiKey?: string;
-  anthropicApiKey?: string;
-  selectedProvider?: 'claude' | 'gemini';
+  geminiApiKey?: string
+  anthropicApiKey?: string
+  selectedProvider?: 'claude' | 'gemini'
 }
 ```
 
@@ -449,27 +453,31 @@ npm run test:e2e -- --run tests/e2e/pipeline.test.ts
 
 ## Current Accuracy (Claude Provider)
 
-| Metric | Result |
-|--------|--------|
+| Metric             | Result                     |
+| ------------------ | -------------------------- |
 | Heading text match | 89% (8/9 on arxiv-roadmap) |
-| Content extraction | 100% valid |
-| Markdown format | Parseable |
-| H1/H2 detection | Matches expected |
+| Content extraction | 100% valid                 |
+| Markdown format    | Parseable                  |
+| H1/H2 detection    | Matches expected           |
 
 ## Dependencies
 
 ### Core
+
 - `electron`: Desktop application framework
 - `react`: UI framework
 - `pdf.js`: PDF parsing and rendering
 - `pdf-lib`: PDF manipulation (page extraction)
 
 ### LLM Providers
+
 - `@anthropic-ai/sdk`: Claude API client
 - `@google/generative-ai`: Gemini API client
 
 ### Reliability
+
 - `effect`: Functional error handling and retry logic
 
 ### Node.js PDF Rendering
+
 - `@napi-rs/canvas`: Native canvas for Node.js (replaces node-canvas)

@@ -9,12 +9,14 @@ Tests validate conversion quality without requiring exact text matching. Focus o
 Validates heading hierarchy is preserved correctly.
 
 **Checks:**
+
 - Heading count per level matches expected
 - Hierarchy validity (no skipped levels, e.g., H1 → H3)
 - Heading text matches with fuzzy tolerance (~90% similarity)
 - Sequence order preserved
 
 **Expected format:**
+
 ```json
 {
   "headings": [
@@ -27,10 +29,12 @@ Validates heading hierarchy is preserved correctly.
 ## Priority 2: Content Type Extraction
 
 ### Images
+
 - **Quantity:** extracted count matches expected
 - **Validity:** file exists, readable, non-zero size, decodable, reasonable dimensions
 
 ### Tables
+
 - **Quantity:** table count matches expected
 - **Validity:**
   - Has header row
@@ -38,12 +42,14 @@ Validates heading hierarchy is preserved correctly.
   - Cells contain readable text
 
 ### Code Snippets
+
 - **Quantity:** fenced code block count matches
 - **Validity:**
   - Language tag present (if in source)
   - Content non-empty
 
 ### Charts/Diagrams
+
 - Treated as images for extraction
 - Same validity checks as images
 
