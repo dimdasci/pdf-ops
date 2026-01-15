@@ -32,3 +32,6 @@ analysis-progress.md
 # Environment variables
 .env
 .env.local
+
+# dprint cache
+.dprint/
