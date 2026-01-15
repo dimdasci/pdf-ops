@@ -16,6 +16,12 @@
     "format:check": "dprint check",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "preview": "vite preview",
+    "test:unit": "vitest run --config tests/vitest.component.config.ts tests/unit",
+    "test:components": "vitest run --config tests/vitest.component.config.ts tests/components",
+    "test:integration": "playwright test --project=integration",
+    "test:workflow": "RUN_WORKFLOW_TESTS=1 playwright test --project=workflows",
+    "test": "npm run test:unit && npm run test:components",
+    "test:ci": "npm run test && npm run test:integration",
     "test:e2e": "vitest run --config tests/vitest.config.ts",
     "test:e2e:watch": "vitest --config tests/vitest.config.ts",
     "prepare": "husky"
