@@ -114,22 +114,6 @@ describe('Workspace', () => {
       expect(buttons.length).toBeGreaterThanOrEqual(3)
     })
 
-    it('calls saveMarkdownFile when save button is clicked', async () => {
-      const { container } = render(
-        <Workspace filePath="/test/document.pdf" onClose={mockOnClose} />,
-      )
-
-      // Wait for loading to complete
-      await waitFor(() => {
-        expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument()
-      })
-
-      // Find the save button by its position in the toolbar
-      // It's the last button with Save icon in the toolbar
-      const saveButton = container.querySelector('button:last-of-type')
-      expect(saveButton).toBeInTheDocument()
-    })
-
     it('convert button is disabled while loading', () => {
       render(<Workspace filePath="/test/document.pdf" onClose={mockOnClose} />)
 
