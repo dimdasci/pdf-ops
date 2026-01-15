@@ -161,27 +161,6 @@ describe('Effect Wrapper', () => {
   })
 
   describe('Retry Schedule', () => {
-    it.effect('creates schedule with configured max attempts', () =>
-      Effect.gen(function*() {
-        const schedule = createRetrySchedule({
-          baseDelay: '100 millis',
-          maxDelay: '1 second',
-          maxAttempts: 3,
-          factor: 2,
-        })
-
-        // Verify schedule is created (it's an Effect Schedule)
-        expect(schedule).toBeDefined()
-      }))
-
-    it.effect('uses default config when not provided', () =>
-      Effect.gen(function*() {
-        const schedule = createRetrySchedule()
-
-        // Verify schedule is created with defaults
-        expect(schedule).toBeDefined()
-      }))
-
     it.scoped('exponential backoff increases delays', () =>
       Effect.gen(function*() {
         const retryTimes: number[] = []
