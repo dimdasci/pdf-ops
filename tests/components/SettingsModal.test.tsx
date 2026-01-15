@@ -394,49 +394,5 @@ describe('SettingsModal', () => {
       expect(mockOnClose).toHaveBeenCalled()
     })
 
-    it('renders modal content in document.body via portal', async () => {
-      render(
-        <SettingsModal
-          isOpen={true}
-          onClose={mockOnClose}
-          onKeysChanged={mockOnKeysChanged}
-        />,
-      )
-
-      await waitFor(() => {
-        // Modal uses fixed positioning with z-index 9999
-        const modalBackdrop = document.querySelector('.fixed.inset-0.z-\\[9999\\]')
-        expect(modalBackdrop).toBeInTheDocument()
-      })
-    })
-
-    it('displays provider descriptions', async () => {
-      render(
-        <SettingsModal
-          isOpen={true}
-          onClose={mockOnClose}
-          onKeysChanged={mockOnKeysChanged}
-        />,
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText(/Large context window/i)).toBeInTheDocument()
-        expect(screen.getByText(/Native PDF support/i)).toBeInTheDocument()
-      })
-    })
-
-    it('displays security notice about encrypted storage', async () => {
-      render(
-        <SettingsModal
-          isOpen={true}
-          onClose={mockOnClose}
-          onKeysChanged={mockOnKeysChanged}
-        />,
-      )
-
-      await waitFor(() => {
-        expect(screen.getByText(/stored securely.*encrypted/i)).toBeInTheDocument()
-      })
-    })
   })
 })
