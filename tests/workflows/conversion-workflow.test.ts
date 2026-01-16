@@ -10,10 +10,6 @@
  * - RUN_WORKFLOW_TESTS=1 environment variable set
  *
  * Run with: RUN_WORKFLOW_TESTS=1 npm run test:workflow
- *
- * NOTE: These tests use text-based and role-based selectors since the app
- * currently lacks data-testid attributes. Selectors may need adjustment
- * when data-testid attributes are added to components.
  */
 import { _electron as electron, ElectronApplication, expect, Page, test } from '@playwright/test'
 import * as path from 'path'
@@ -77,22 +73,19 @@ test.describe('Conversion Workflow', () => {
     await expect(window.locator('text=API Configuration')).toBeVisible({ timeout: 5000 })
 
     if (geminiKey) {
-      // Find Gemini API key input by its label
-      const geminiInput = window.locator('input[placeholder*="Gemini API key"]')
+      const geminiInput = window.locator('[data-testid="gemini-key-input"]')
       await expect(geminiInput).toBeVisible()
       await geminiInput.fill(geminiKey)
     }
 
     if (anthropicKey) {
-      // Find Anthropic API key input by its label
-      const anthropicInput = window.locator('input[placeholder*="Anthropic API key"]')
+      const anthropicInput = window.locator('[data-testid="anthropic-key-input"]')
       await expect(anthropicInput).toBeVisible()
       await anthropicInput.fill(anthropicKey)
     }
 
     // Step 3: Save settings
-    // Look for button containing "Save" text
-    const saveButton = window.locator('button:has-text("Save")')
+    const saveButton = window.locator('[data-testid="save-settings"]')
     await saveButton.click()
 
     // Wait for save confirmation (button shows "Saved!" briefly)
@@ -147,7 +140,7 @@ test.describe('Conversion Workflow', () => {
 
     // If the app doesn't support test file injection, we can at least verify
     // that the drop zone is visible and ready for interaction
-    const dropZone = window.locator('text=Select PDF File')
+    const dropZone = window.locator('[data-testid="drop-zone"]')
     const isDropZoneVisible = await dropZone.isVisible().catch(() => false)
 
     if (isDropZoneVisible) {
@@ -165,12 +158,12 @@ test.describe('Conversion Workflow', () => {
     // If we successfully got past file selection (perhaps via test hooks), continue...
 
     // Step 6: Wait for PDF to load in Workspace
-    // The Workspace shows "{filename}" and "{N} pages"
-    await expect(window.locator('text=/\\d+ pages/')).toBeVisible({ timeout: 15000 })
+    await expect(window.locator('[data-testid="page-count"]')).toContainText(/\d+ pages/, {
+      timeout: 15000,
+    })
 
     // Step 7: Start conversion
-    // Click the "Convert" button
-    const convertButton = window.locator('button:has-text("Convert")')
+    const convertButton = window.locator('[data-testid="convert-button"]')
     await expect(convertButton).toBeEnabled()
     await convertButton.click()
 
@@ -180,11 +173,10 @@ test.describe('Conversion Workflow', () => {
     await expect(window.locator('text=Done!')).toBeVisible({ timeout: 300000 })
 
     // Step 9: Verify markdown output has content
-    // The markdown preview shows the converted content
-    // We check that the markdown textarea/preview has substantial content
+    const markdownOutput = window.locator('[data-testid="markdown-output"]')
+    await expect(markdownOutput).toBeVisible()
+
     const markdownContent = await window.evaluate(() => {
-      // The markdown is stored in component state and rendered in preview
-      // We can check the textarea in "Raw Markdown" tab
       const textarea = document.querySelector('textarea')
       return textarea?.value || ''
     })
@@ -192,8 +184,7 @@ test.describe('Conversion Workflow', () => {
     expect(markdownContent.length).toBeGreaterThan(100)
 
     // Step 10: Verify export (save) button is available
-    // The save button is in the toolbar with a Save icon
-    const saveFileButton = window.locator('button:has(svg.lucide-save)')
+    const saveFileButton = window.locator('[data-testid="export-button"]')
     await expect(saveFileButton).toBeVisible()
     await expect(saveFileButton).toBeEnabled()
 
@@ -223,7 +214,7 @@ test.describe('Conversion Workflow', () => {
     // Step 2: Enter invalid API key
     await expect(window.locator('text=API Configuration')).toBeVisible({ timeout: 5000 })
 
-    const geminiInput = window.locator('input[placeholder*="Gemini API key"]')
+    const geminiInput = window.locator('[data-testid="gemini-key-input"]')
     await expect(geminiInput).toBeVisible()
 
     // Clear any existing key and enter invalid one
@@ -231,7 +222,7 @@ test.describe('Conversion Workflow', () => {
     await geminiInput.fill('invalid-api-key-12345')
 
     // Save the invalid key
-    const saveButton = window.locator('button:has-text("Save")')
+    const saveButton = window.locator('[data-testid="save-settings"]')
     await saveButton.click()
     await expect(window.locator('text=Saved!')).toBeVisible({ timeout: 5000 })
 
@@ -249,9 +240,8 @@ test.describe('Conversion Workflow', () => {
     if (await validateButton.isVisible().catch(() => false)) {
       await validateButton.click()
 
-      // Wait for validation to complete - should show error (red alert icon)
-      // The validation sets isValid to false, which renders AlertCircle with text-red-400
-      await expect(window.locator('svg.lucide-alert-circle')).toBeVisible({ timeout: 30000 })
+      // Wait for validation to complete - status indicator appears with testid
+      await expect(window.locator('[data-testid="gemini-status"]')).toBeVisible({ timeout: 30000 })
 
       console.log('Invalid API key validation correctly shows error indicator')
     }
