@@ -199,10 +199,21 @@ describe('Effect Wrapper', () => {
         expect(result).toBe('success')
         expect(attemptCount).toBe(4)
 
-        // Verify delays increased (first attempt at time 0)
-        expect(retryTimes[0]).toBe(0)
-        // Subsequent attempts should be at increasing intervals
-        expect(retryTimes.length).toBeGreaterThanOrEqual(2)
+        // Verify exponential timing pattern
+        expect(retryTimes.length).toBeGreaterThanOrEqual(3)
+        const delay1 = retryTimes[1] - retryTimes[0]
+        const delay2 = retryTimes[2] - retryTimes[1]
+
+        // First delay should be ~1000ms (baseDelay)
+        expect(delay1).toBeGreaterThanOrEqual(900)
+        expect(delay1).toBeLessThanOrEqual(1100)
+
+        // Second delay should be ~2000ms (baseDelay * factor)
+        expect(delay2).toBeGreaterThanOrEqual(1800)
+        expect(delay2).toBeLessThanOrEqual(2200)
+
+        // Verify exponential growth: delay2 should be ~2x delay1
+        expect(delay2).toBeGreaterThan(delay1 * 1.5)
       }))
   })
 
