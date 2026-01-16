@@ -259,7 +259,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             <span className="font-medium text-sm truncate max-w-[200px]" title={filePath}>
               {filePath.split('/').pop()}
             </span>
-            <span className="text-xs text-zinc-500">
+            <span data-testid="page-count" className="text-xs text-zinc-500">
               {metadata ? `${metadata.pageCount} pages` : 'Loading...'}
             </span>
           </div>
@@ -272,12 +272,13 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             </span>
           )}
           {isConverting && (
-            <span className="text-xs text-indigo-400 animate-pulse">
+            <span data-testid="conversion-status" className="text-xs text-indigo-400 animate-pulse">
               {conversionStatus}
             </span>
           )}
 
           <button
+            data-testid="convert-button"
             onClick={handleConvert}
             disabled={isConverting || isLoading}
             className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-indigo-500/20"
@@ -288,6 +289,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             {isConverting ? 'Stop' : 'Convert'}
           </button>
           <button
+            data-testid="export-button"
             onClick={handleSaveFile}
             aria-label="Save markdown"
             className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
@@ -390,7 +392,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
             </button>
           </div>
 
-          <div className="flex-1 overflow-auto bg-zinc-900/30">
+          <div data-testid="markdown-output" className="flex-1 overflow-auto bg-zinc-900/30">
             {activeTab === 'preview'
               ? (
                 <div className="p-12 max-w-4xl mx-auto text-zinc-300">
