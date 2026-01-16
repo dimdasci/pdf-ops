@@ -338,12 +338,16 @@ describe('SettingsModal', () => {
     })
 
     it('resets validation status when key changes', async () => {
-      mockElectronAPI.getApiKeys.mockResolvedValue({
-        gemini: 'initial-key',
-        anthropic: '',
-      })
-
       const user = userEvent.setup()
+
+      // Mock the dynamic import for validation
+      vi.mock('@google/generative-ai', () => ({
+        GoogleGenerativeAI: vi.fn().mockImplementation(() => ({
+          getGenerativeModel: vi.fn().mockReturnValue({
+            generateContent: vi.fn().mockResolvedValue({}),
+          }),
+        })),
+      }))
 
       render(
         <SettingsModal
@@ -354,17 +358,30 @@ describe('SettingsModal', () => {
       )
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText(/gemini/i)).toHaveValue('initial-key')
+        expect(screen.getByPlaceholderText(/gemini/i)).toBeInTheDocument()
       })
 
-      // Type additional characters to trigger onChange
+      // Enter a key
       const geminiInput = screen.getByPlaceholderText(/gemini/i)
+      await user.clear(geminiInput)
+      await user.type(geminiInput, 'test-api-key')
+
+      // Click validate button
+      const validateButton = screen.getAllByRole('button', { name: /validate/i })[0]
+      await user.click(validateButton)
+
+      // Wait for validation status to appear (checking state shows loader)
+      await waitFor(() => {
+        expect(screen.getByTestId('gemini-status')).toBeInTheDocument()
+      })
+
+      // Now change the key
       await user.type(geminiInput, '-modified')
 
-      // Status icons should not be present after key modification
-      // (they only appear after validation attempt)
-      expect(screen.queryByTestId('gemini-valid')).not.toBeInTheDocument()
-      expect(screen.queryByTestId('gemini-invalid')).not.toBeInTheDocument()
+      // Verify status is cleared
+      await waitFor(() => {
+        expect(screen.queryByTestId('gemini-status')).not.toBeInTheDocument()
+      })
     })
 
     it('closes modal when close button clicked', async () => {

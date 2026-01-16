@@ -105,15 +105,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     }
   }
 
-  const renderStatusIcon = (status: ProviderStatus) => {
+  const renderStatusIcon = (status: ProviderStatus, testId: string) => {
     if (status.isChecking) {
-      return <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+      return <Loader2 data-testid={testId} className="w-4 h-4 animate-spin text-zinc-400" />
     }
     if (status.isValid === true) {
-      return <CheckCircle className="w-4 h-4 text-green-400" />
+      return <CheckCircle data-testid={testId} className="w-4 h-4 text-green-400" />
     }
     if (status.isValid === false) {
-      return <AlertCircle className="w-4 h-4 text-red-400" />
+      return <AlertCircle data-testid={testId} className="w-4 h-4 text-red-400" />
     }
     return null
   }
@@ -141,7 +141,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 Gemini API Key (Google)
               </label>
               <div className="flex items-center gap-2">
-                {renderStatusIcon(geminiStatus)}
+                {renderStatusIcon(geminiStatus, 'gemini-status')}
                 <button
                   onClick={validateGeminiKey}
                   disabled={!geminiKey || geminiStatus.isChecking}
@@ -173,7 +173,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 Anthropic API Key (Claude)
               </label>
               <div className="flex items-center gap-2">
-                {renderStatusIcon(anthropicStatus)}
+                {renderStatusIcon(anthropicStatus, 'anthropic-status')}
                 <button
                   onClick={validateAnthropicKey}
                   disabled={!anthropicKey || anthropicStatus.isChecking}
