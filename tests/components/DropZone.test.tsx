@@ -26,8 +26,7 @@ describe('DropZone', () => {
       })
 
       // Find the hidden file input and upload
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      expect(fileInput).toBeTruthy()
+      const fileInput = screen.getByTestId('file-input') as HTMLInputElement
 
       await user.upload(fileInput, pdfFile)
 
@@ -37,9 +36,9 @@ describe('DropZone', () => {
 
     it('calls onFileSelect when PDF file is dropped', () => {
       const onFileSelect = vi.fn()
-      const { container } = render(<DropZone onFileSelect={onFileSelect} />)
+      render(<DropZone onFileSelect={onFileSelect} />)
 
-      const dropZone = container.firstChild as HTMLElement
+      const dropZone = screen.getByTestId('drop-zone')
 
       // Create a mock PDF file
       const pdfFile = new File(['pdf content'], 'document.pdf', {
@@ -63,9 +62,9 @@ describe('DropZone', () => {
 
     it('does not call onFileSelect when non-PDF file is dropped', () => {
       const onFileSelect = vi.fn()
-      const { container } = render(<DropZone onFileSelect={onFileSelect} />)
+      render(<DropZone onFileSelect={onFileSelect} />)
 
-      const dropZone = container.firstChild as HTMLElement
+      const dropZone = screen.getByTestId('drop-zone')
 
       // Create a non-PDF file (text file)
       const textFile = new File(['text content'], 'document.txt', {
@@ -92,9 +91,9 @@ describe('DropZone', () => {
   describe('drag feedback', () => {
     it('changes text to "Drop PDF here" during drag over', () => {
       const onFileSelect = vi.fn()
-      const { container } = render(<DropZone onFileSelect={onFileSelect} />)
+      render(<DropZone onFileSelect={onFileSelect} />)
 
-      const dropZone = container.firstChild as HTMLElement
+      const dropZone = screen.getByTestId('drop-zone')
 
       // Initial state - should show default text
       expect(screen.getByText('Select PDF File')).toBeInTheDocument()
@@ -110,9 +109,9 @@ describe('DropZone', () => {
 
     it('applies visual highlight styles during drag over', () => {
       const onFileSelect = vi.fn()
-      const { container } = render(<DropZone onFileSelect={onFileSelect} />)
+      render(<DropZone onFileSelect={onFileSelect} />)
 
-      const dropZone = container.firstChild as HTMLElement
+      const dropZone = screen.getByTestId('drop-zone')
 
       // Initial state - should have default border color (not the active drag highlight)
       expect(dropZone.className).toContain('border-zinc-700')
@@ -130,9 +129,9 @@ describe('DropZone', () => {
 
     it('reverts to default state after drag leave', () => {
       const onFileSelect = vi.fn()
-      const { container } = render(<DropZone onFileSelect={onFileSelect} />)
+      render(<DropZone onFileSelect={onFileSelect} />)
 
-      const dropZone = container.firstChild as HTMLElement
+      const dropZone = screen.getByTestId('drop-zone')
 
       // Simulate dragover event
       fireEvent.dragOver(dropZone)
@@ -151,9 +150,9 @@ describe('DropZone', () => {
 
     it('reverts to default state after drop', () => {
       const onFileSelect = vi.fn()
-      const { container } = render(<DropZone onFileSelect={onFileSelect} />)
+      render(<DropZone onFileSelect={onFileSelect} />)
 
-      const dropZone = container.firstChild as HTMLElement
+      const dropZone = screen.getByTestId('drop-zone')
 
       // Simulate dragover event
       fireEvent.dragOver(dropZone)
