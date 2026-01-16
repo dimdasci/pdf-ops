@@ -42,6 +42,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelect }) => {
 
   return (
     <div
+      data-testid="drop-zone"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -59,6 +60,7 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFileSelect }) => {
       `}
     >
       <input
+        data-testid="file-input"
         type="file"
         ref={fileInputRef}
         onChange={handleFileInput}
