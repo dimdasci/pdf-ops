@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SettingsModal } from '../../src/components/SettingsModal'
@@ -399,12 +399,7 @@ describe('SettingsModal', () => {
         expect(screen.getByText(/API Configuration/i)).toBeInTheDocument()
       })
 
-      // Find and click the X button (close button)
-      const closeButton = screen.getAllByRole('button').find(
-        button => button.querySelector('svg.lucide-x'),
-      )
-
-      // Alternative: click cancel button
+      // Click cancel button to close modal
       const cancelButton = screen.getByRole('button', { name: /cancel/i })
       await user.click(cancelButton)
 
