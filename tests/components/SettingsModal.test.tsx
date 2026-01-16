@@ -137,7 +137,7 @@ describe('SettingsModal', () => {
       await user.type(anthropicInput, 'new-anthropic-key')
 
       // Click save
-      const saveButton = screen.getByRole('button', { name: /save/i })
+      const saveButton = screen.getByTestId('save-settings')
       await user.click(saveButton)
 
       await waitFor(() => {
@@ -168,7 +168,7 @@ describe('SettingsModal', () => {
       await user.type(geminiInput, 'only-gemini-key')
 
       // Click save
-      const saveButton = screen.getByRole('button', { name: /save/i })
+      const saveButton = screen.getByTestId('save-settings')
       await user.click(saveButton)
 
       await waitFor(() => {
@@ -196,7 +196,7 @@ describe('SettingsModal', () => {
       const geminiInput = screen.getByPlaceholderText(/gemini/i)
       await user.type(geminiInput, 'test-key')
 
-      const saveButton = screen.getByRole('button', { name: /save/i })
+      const saveButton = screen.getByTestId('save-settings')
       await user.click(saveButton)
 
       await waitFor(() => {
@@ -222,7 +222,7 @@ describe('SettingsModal', () => {
       const geminiInput = screen.getByPlaceholderText(/gemini/i)
       await user.type(geminiInput, 'callback-test-key')
 
-      const saveButton = screen.getByRole('button', { name: /save/i })
+      const saveButton = screen.getByTestId('save-settings')
       await user.click(saveButton)
 
       await waitFor(() => {
@@ -245,7 +245,7 @@ describe('SettingsModal', () => {
         expect(screen.getByPlaceholderText(/gemini/i)).toBeInTheDocument()
       })
 
-      const saveButton = screen.getByRole('button', { name: /save/i })
+      const saveButton = screen.getByTestId('save-settings')
       expect(saveButton).toBeDisabled()
     })
 
@@ -270,7 +270,7 @@ describe('SettingsModal', () => {
       const geminiInput = screen.getByPlaceholderText(/gemini/i)
       await user.type(geminiInput, 'test-key')
 
-      const saveButton = screen.getByRole('button', { name: /save/i })
+      const saveButton = screen.getByTestId('save-settings')
       await user.click(saveButton)
 
       await waitFor(() => {
