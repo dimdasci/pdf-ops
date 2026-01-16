@@ -289,6 +289,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
           </button>
           <button
             onClick={handleSaveFile}
+            aria-label="Save markdown"
             className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
           >
             <Save className="w-5 h-5" />

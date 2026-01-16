@@ -101,17 +101,13 @@ describe('Workspace', () => {
     it('renders save button in toolbar', async () => {
       render(<Workspace filePath="/test/document.pdf" onClose={mockOnClose} />)
 
-      // Wait for component to load
       await waitFor(() => {
         expect(screen.queryByText('Loading PDF...')).not.toBeInTheDocument()
       })
 
-      // The save button uses a Save icon from lucide-react
-      // Find all buttons and look for one containing the save icon
-      const buttons = screen.getAllByRole('button')
-
-      // There should be multiple buttons: back, convert, save
-      expect(buttons.length).toBeGreaterThanOrEqual(3)
+      // Find save button by accessible name
+      const saveButton = screen.getByRole('button', { name: /save/i })
+      expect(saveButton).toBeInTheDocument()
     })
 
     it('convert button is disabled while loading', () => {
