@@ -14,22 +14,22 @@ This document defines the testing strategy for the PDF Translator application, c
 ## Testing Pyramid
 
 ```
-                      /\
-                     /  \         WORKFLOW (1-2 tests)
-                    / $$ \        Real Electron + Real LLM
-                   /──────\       Pre-merge, nightly
-                  /        \
-                 /          \     IPC INTEGRATION (5-10 tests)
-                / Playwright \    Real Electron IPC
-               /──────────────\   Every PR
-              /                \
-             /   COMPONENTS     \ (20-30 tests)
-            /  Vitest + RTL      \ Mock Electron bridge only
-           /──────────────────────\ Pre-commit
-          /                        \
-         /      EFFECT UNIT         \ (10-15 tests)
-        /    @effect/vitest          \ TestClock, pure logic
-       /______________________________\ Pre-commit
+               /\
+              /  \         WORKFLOW (1-2 tests)
+             / $$ \        Real Electron + Real LLM
+            /──────\       Pre-merge, nightly
+           /        \
+          /          \     IPC INTEGRATION (5-10 tests)
+         / Playwright \    Real Electron IPC
+        /──────────────\   Every PR
+       /                \
+      /   COMPONENTS     \ (20-30 tests)
+     /  Vitest + RTL      \ Mock Electron bridge only
+    /──────────────────────\ Pre-commit
+   /                        \
+  /      EFFECT UNIT         \ (10-15 tests)
+ /    @effect/vitest          \ TestClock, pure logic
+/______________________________\ Pre-commit
 ```
 
 **Existing E2E tests** (conversion.test.ts, pipeline.test.ts) remain separate as accuracy benchmarks.
@@ -45,12 +45,12 @@ This document defines the testing strategy for the PDF Translator application, c
 
 **What to test:**
 
-| Test | Why Valuable |
-| --- | --- |
-| `classifyError()` returns correct error type | Pure logic, catches regressions when error patterns change |
-| Retry schedule respects exponential backoff | TestClock advances time instantly, verifies math is correct |
-| Rate limiter enforces concurrency limit | Verifies semaphore logic without real delays |
-| `isRetryableError()` for edge cases | Documents which errors trigger retries |
+| Test                                         | Why Valuable                                                |
+| -------------------------------------------- | ----------------------------------------------------------- |
+| `classifyError()` returns correct error type | Pure logic, catches regressions when error patterns change  |
+| Retry schedule respects exponential backoff  | TestClock advances time instantly, verifies math is correct |
+| Rate limiter enforces concurrency limit      | Verifies semaphore logic without real delays                |
+| `isRetryableError()` for edge cases          | Documents which errors trigger retries                      |
 
 **What NOT to test:**
 
@@ -91,11 +91,11 @@ This mock is justified because:
 
 **What to test per component:**
 
-| Component | Test Cases |
-| --- | --- |
-| `DropZone` | Accepts PDF files, rejects non-PDF, shows drag feedback |
-| `SettingsModal` | Loads keys on open, saves on click, validates inputs |
-| `Workspace` | Shows loading state, displays conversion progress, enables export when done |
+| Component       | Test Cases                                                                  |
+| --------------- | --------------------------------------------------------------------------- |
+| `DropZone`      | Accepts PDF files, rejects non-PDF, shows drag feedback                     |
+| `SettingsModal` | Loads keys on open, saves on click, validates inputs                        |
+| `Workspace`     | Shows loading state, displays conversion progress, enables export when done |
 
 **What NOT to test:**
 
@@ -141,12 +141,12 @@ await electronApp.evaluate(async ({ dialog }) => {
 
 **What to test:**
 
-| IPC Handler | Test Case |
-| --- | --- |
-| `readFileBuffer` | Returns correct bytes for test PDF |
-| `getApiKeys` / `saveApiKeys` | Round-trip preserves values |
-| `saveMarkdownFile` | Creates file at chosen path |
-| Error cases | Invalid path returns error, not crash |
+| IPC Handler                  | Test Case                             |
+| ---------------------------- | ------------------------------------- |
+| `readFileBuffer`             | Returns correct bytes for test PDF    |
+| `getApiKeys` / `saveApiKeys` | Round-trip preserves values           |
+| `saveMarkdownFile`           | Creates file at chosen path           |
+| Error cases                  | Invalid path returns error, not crash |
 
 **What NOT to test:**
 
@@ -187,11 +187,11 @@ test('complete conversion workflow', async () => {
 
 **Cost and flakiness controls:**
 
-| Control | Approach |
-| --- | --- |
-| **Cost** | Use smallest fixture (4 pages), skip unless `RUN_WORKFLOW_TESTS=1` |
-| **Flakiness** | Allow 1 retry, generous timeout (5 min) |
-| **CI budget** | Run only pre-merge and nightly, not every push |
+| Control       | Approach                                                           |
+| ------------- | ------------------------------------------------------------------ |
+| **Cost**      | Use smallest fixture (4 pages), skip unless `RUN_WORKFLOW_TESTS=1` |
+| **Flakiness** | Allow 1 retry, generous timeout (5 min)                            |
+| **CI budget** | Run only pre-merge and nightly, not every push                     |
 
 **What to test:**
 
@@ -256,12 +256,12 @@ npm install -D @effect/vitest @testing-library/react @testing-library/user-event
 
 ## Execution Schedule
 
-| Test Suite | Trigger | Duration | Cost |
-| --- | --- | --- | --- |
-| Unit + Components | Pre-commit hook | ~5 sec | Free |
-| Integration | CI on every PR | ~30 sec | Free |
-| Workflow | Pre-merge + nightly | ~5 min | API calls |
-| E2E Benchmarks | Manual / accuracy work | ~15 min | API calls |
+| Test Suite        | Trigger                | Duration | Cost      |
+| ----------------- | ---------------------- | -------- | --------- |
+| Unit + Components | Pre-commit hook        | ~5 sec   | Free      |
+| Integration       | CI on every PR         | ~30 sec  | Free      |
+| Workflow          | Pre-merge + nightly    | ~5 min   | API calls |
+| E2E Benchmarks    | Manual / accuracy work | ~15 min  | API calls |
 
 ## Key Principles
 
