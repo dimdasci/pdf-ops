@@ -17,7 +17,7 @@ describe('Effect Wrapper', () => {
   describe('classifyError', () => {
     // Rate limit detection
     it.effect('returns RateLimitError for "rate limit" message', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('rate limit exceeded')
         const result = classifyError(error)
 
@@ -26,7 +26,7 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('returns RateLimitError for 429 status code in message', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('HTTP 429 Too Many Requests')
         const result = classifyError(error)
 
@@ -35,8 +35,8 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('preserves RateLimitError if already classified', () =>
-      Effect.gen(function*() {
-        const original = new RateLimitError('rate limit', 5000)
+      Effect.sync(() => {
+        const original = new RateLimitError({ message: 'rate limit', retryAfterMs: 5000 })
         const result = classifyError(original)
 
         expect(result).toBe(original)
@@ -45,7 +45,7 @@ describe('Effect Wrapper', () => {
 
     // Timeout detection
     it.effect('returns TimeoutError for "timeout" message', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('Request timeout after 30s')
         const result = classifyError(error)
 
@@ -54,8 +54,8 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('preserves TimeoutError if already classified', () =>
-      Effect.gen(function*() {
-        const original = new TimeoutError('Operation timed out')
+      Effect.sync(() => {
+        const original = new TimeoutError({ message: 'Operation timed out' })
         const result = classifyError(original)
 
         expect(result).toBe(original)
@@ -64,7 +64,7 @@ describe('Effect Wrapper', () => {
 
     // API error with status codes
     it.effect('returns APIError with status code for HTTP 500', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('Request failed with status: 500')
         const result = classifyError(error)
 
@@ -77,7 +77,7 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('returns APIError with isRetryable=false for 400', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('Request failed with status: 400')
         const result = classifyError(error)
 
@@ -90,8 +90,12 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('preserves APIError if already classified', () =>
-      Effect.gen(function*() {
-        const original = new APIError('Bad request', 400, false)
+      Effect.sync(() => {
+        const original = new APIError({
+          message: 'Bad request',
+          statusCode: 400,
+          isRetryable: false,
+        })
         const result = classifyError(original)
 
         expect(result).toBe(original)
@@ -99,7 +103,7 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('returns APIError for unknown error types', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('Something went wrong')
         const result = classifyError(error)
 
@@ -108,7 +112,7 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('handles non-Error objects', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = 'string error'
         const result = classifyError(error)
 
@@ -119,25 +123,25 @@ describe('Effect Wrapper', () => {
 
   describe('isRetryableError', () => {
     it.effect('returns true for RateLimitError', () =>
-      Effect.gen(function*() {
-        const error = new RateLimitError('rate limit', 5000)
+      Effect.sync(() => {
+        const error = new RateLimitError({ message: 'rate limit', retryAfterMs: 5000 })
         expect(isRetryableError(error)).toBe(true)
       }))
 
     it.effect('returns true for retryable APIError', () =>
-      Effect.gen(function*() {
-        const error = new APIError('server error', 500, true)
+      Effect.sync(() => {
+        const error = new APIError({ message: 'server error', statusCode: 500, isRetryable: true })
         expect(isRetryableError(error)).toBe(true)
       }))
 
     it.effect('returns false for non-retryable APIError', () =>
-      Effect.gen(function*() {
-        const error = new APIError('bad request', 400, false)
+      Effect.sync(() => {
+        const error = new APIError({ message: 'bad request', statusCode: 400, isRetryable: false })
         expect(isRetryableError(error)).toBe(false)
       }))
 
     it.effect('returns true for network error patterns', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const patterns = ['ECONNRESET', 'network error', 'rate limit', '429', '503', 'timeout']
         for (const pattern of patterns) {
           const error = new Error(pattern)
@@ -146,13 +150,13 @@ describe('Effect Wrapper', () => {
       }))
 
     it.effect('returns false for generic errors without retryable patterns', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         const error = new Error('Invalid API key')
         expect(isRetryableError(error)).toBe(false)
       }))
 
     it.effect('returns false for non-Error values', () =>
-      Effect.gen(function*() {
+      Effect.sync(() => {
         expect(isRetryableError(null)).toBe(false)
         expect(isRetryableError(undefined)).toBe(false)
         expect(isRetryableError('string error')).toBe(false)
@@ -172,7 +176,7 @@ describe('Effect Wrapper', () => {
           retryTimes.push(Number(currentTime))
 
           if (attemptCount < 4) {
-            return yield* Effect.fail(new RateLimitError('rate limit'))
+            return yield* Effect.fail(new RateLimitError({ message: 'rate limit' }))
           }
           return 'success'
         })

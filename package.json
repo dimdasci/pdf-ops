@@ -24,7 +24,9 @@
     "test:ci": "npm run test && npm run test:integration",
     "test:e2e": "vitest run --config tests/vitest.config.ts",
     "test:e2e:watch": "vitest --config tests/vitest.config.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "package:dir": "npm run build && electron-builder --dir --config electron-builder.config.cjs",
+    "package": "npm run build && electron-builder --config electron-builder.config.cjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

@@ -5,6 +5,8 @@
  * Uses intelligent windowed processing with context passing.
  */
 
+import { Effect } from 'effect'
+
 import type {
   DocumentAnalysis,
   DocumentStructure,
@@ -581,7 +583,7 @@ function extractLastParagraph(markdown: string): string {
 }
 
 /**
- * Process windows in parallel.
+ * Process windows in parallel using Effect's concurrency primitives.
  */
 async function processWindowsParallel(
   pdfService: PdfService,
@@ -596,15 +598,11 @@ async function processWindowsParallel(
     concurrency: number
   },
 ): Promise<WindowResult[]> {
-  const results: WindowResult[] = new Array(windows.length)
   const { dpi, analysis, structure, patterns, onProgress, concurrency } = options
+  let processedCount = 0
 
-  // Process in batches
-  for (let i = 0; i < windows.length; i += concurrency) {
-    const batch = windows.slice(i, i + concurrency)
-    const batchPromises = batch.map(async (window, batchIndex) => {
-      const windowIndex = i + batchIndex
-
+  const processWindowEffect = (window: WindowSpec) =>
+    Effect.gen(function*() {
       // Build context (note: for parallel, we don't have previous window context)
       const context = buildWindowContext(
         window,
@@ -616,20 +614,30 @@ async function processWindowsParallel(
         '', // No previous summary in parallel
       )
 
-      const result = await processWindow(pdfService, provider, window, context, dpi)
-      results[windowIndex] = result
+      const result = yield* Effect.promise(() =>
+        processWindow(pdfService, provider, window, context, dpi)
+      )
 
+      processedCount++
       onProgress?.(
-        `Processed window ${windowIndex + 1} of ${windows.length}`,
-        25 + Math.floor(((windowIndex + 1) / windows.length) * 65),
+        `Processed window ${processedCount} of ${windows.length}`,
+        25 + Math.floor((processedCount / windows.length) * 65),
         100,
       )
+
+      return { windowNumber: window.windowNumber, result }
     })
 
-    await Promise.all(batchPromises)
-  }
+  const resultsWithIndex = await Effect.runPromise(
+    Effect.forEach(windows, window => processWindowEffect(window), {
+      concurrency,
+    }),
+  )
 
-  return results
+  // Sort by window number and extract results to maintain order
+  return resultsWithIndex
+    .sort((a, b) => a.windowNumber - b.windowNumber)
+    .map(r => r.result)
 }
 
 /**

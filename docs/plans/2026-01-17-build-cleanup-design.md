@@ -23,14 +23,15 @@ Fix build warnings, add package scripts, audit Effect.ts patterns.
 
 ### Mixed Imports Fix
 
-| Module | Current | Fix |
-|--------|---------|-----|
-| pdfjs-dist | static + dynamic in Workspace.tsx, browser.ts | standardize to static (eagerly needed) |
-| @google/generative-ai | static + dynamic in SettingsModal.tsx, gemini.ts | standardize to static |
+| Module                | Current                                          | Fix                                    |
+| --------------------- | ------------------------------------------------ | -------------------------------------- |
+| pdfjs-dist            | static + dynamic in Workspace.tsx, browser.ts    | standardize to static (eagerly needed) |
+| @google/generative-ai | static + dynamic in SettingsModal.tsx, gemini.ts | standardize to static                  |
 
 ### Code Splitting
 
 vite.config.ts → `build.rollupOptions.output.manualChunks`:
+
 - `vendor-pdf`: pdfjs-dist
 - `vendor-llm`: @google/generative-ai, @anthropic-ai/sdk
 - `vendor-react`: react, react-dom
@@ -41,6 +42,7 @@ Target: no chunk > 500KB
 ### Package Scripts
 
 electron-builder config:
+
 - `package:dir` → `release/mac-arm64/` (unpacked)
 - `package` → `release/*.dmg` (unsigned)
 
@@ -48,14 +50,14 @@ macOS unsigned builds require: `xattr -cr /path/to/app`
 
 ### Effect.ts Audit Areas
 
-| Area | Files | Focus |
-|------|-------|-------|
-| Error handling | pipeline/, llm/ | typed errors, specific catch |
-| Service/Layer | llm/, pdf-service/ | Context injection |
-| Resources | pipeline/ | Scope, acquireRelease |
-| Concurrency | pipeline/ | Effect.all options |
-| Pipelines | pipeline/ | Stream for large PDFs |
-| Idioms | all | Promise→Effect conversion |
+| Area           | Files              | Focus                        |
+| -------------- | ------------------ | ---------------------------- |
+| Error handling | pipeline/, llm/    | typed errors, specific catch |
+| Service/Layer  | llm/, pdf-service/ | Context injection            |
+| Resources      | pipeline/          | Scope, acquireRelease        |
+| Concurrency    | pipeline/          | Effect.all options           |
+| Pipelines      | pipeline/          | Stream for large PDFs        |
+| Idioms         | all                | Promise→Effect conversion    |
 
 ## Implementation Plan
 

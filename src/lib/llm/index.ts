@@ -1,6 +1,10 @@
 /**
  * LLM Provider module exports.
  * Provides unified access to multiple LLM providers (Claude, Gemini).
+ *
+ * This module exports both:
+ * 1. Legacy APIs (classes, singleton patterns) for non-Effect code
+ * 2. Effect-based APIs (Context.Tag, Layer) for Effect pipelines
  */
 
 // Types
@@ -24,11 +28,27 @@ export type {
   WindowSpec,
 } from './types'
 
-// Providers
+// Error types for Effect
+export {
+  ApiKeyValidationError,
+  DocumentAnalysisError,
+  type LLMError,
+  LLMProviderError,
+  PageConversionError,
+  ProviderNotConfiguredError,
+} from './types'
+
+// Providers (legacy class-based)
 export { ClaudeProvider } from './claude-provider'
 export { GeminiProvider } from './gemini-provider'
 
-// Registry
+// Effect service types and tags
+export type { ClaudeProviderService } from './claude-provider'
+export { ClaudeProviderTag } from './claude-provider'
+export type { GeminiProviderService } from './gemini-provider'
+export { GeminiProviderTag } from './gemini-provider'
+
+// Registry (legacy)
 export {
   getCurrentProvider,
   getProvider,
@@ -37,6 +57,10 @@ export {
   ProviderRegistry,
   type ProviderRegistryConfig,
 } from './provider-registry'
+
+// Registry (Effect service)
+export type { ProviderRegistryService } from './provider-registry'
+export { ProviderRegistryTag } from './provider-registry'
 
 // Factory function for creating providers
 import { ClaudeProvider } from './claude-provider'

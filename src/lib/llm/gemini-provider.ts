@@ -1,9 +1,15 @@
 /**
  * Gemini LLM Provider implementation using Google Generative AI SDK.
  * Uses image-based processing (no native PDF support).
+ *
+ * This module provides both:
+ * 1. Legacy class-based provider (GeminiProvider) for non-Effect code
+ * 2. Effect-based service (GeminiProviderTag) for Effect pipelines
  */
 
 import { GenerativeModel, GoogleGenerativeAI } from '@google/generative-ai'
+import { Context, Effect, Layer } from 'effect'
+
 import type {
   DocumentAnalysis,
   DocumentStructure,
@@ -18,6 +24,7 @@ import type {
   WindowContext,
   WindowResult,
 } from './types'
+import { DocumentAnalysisError, LLMProviderError, PageConversionError } from './types'
 
 // Default model configuration
 const DEFAULT_MODEL = 'gemini-2.5-flash'
@@ -550,5 +557,220 @@ Last paragraph for continuity.`
     }
 
     return sections
+  }
+}
+
+// =============================================================================
+// Effect-Based Service API
+// =============================================================================
+
+/**
+ * Service interface for Gemini provider in Effect context.
+ * All methods return Effects with properly typed errors.
+ */
+export interface GeminiProviderService {
+  /** Provider name */
+  readonly name: 'gemini'
+
+  /** Display name for UI */
+  readonly displayName: string
+
+  /** Provider capabilities */
+  readonly capabilities: ProviderCapabilities
+
+  /** Analyze document structure and characteristics */
+  readonly analyzeDocument: (
+    pdfData: Uint8Array | string,
+  ) => Effect.Effect<DocumentAnalysis, DocumentAnalysisError>
+
+  /** Extract document structure (headings, sections, TOC) */
+  readonly extractStructure: (
+    pdfData: Uint8Array | string,
+    analysis: DocumentAnalysis,
+  ) => Effect.Effect<DocumentStructure, DocumentAnalysisError>
+
+  /** Convert a single page to markdown */
+  readonly convertPage: (
+    imageBase64: string,
+    context: PageContext,
+  ) => Effect.Effect<PageConversionResult, PageConversionError>
+
+  /** Convert a window (multiple pages) to markdown */
+  readonly convertWindow: (
+    pdfData: Uint8Array | string,
+    context: WindowContext,
+  ) => Effect.Effect<WindowResult, PageConversionError>
+
+  /** Classify an image region */
+  readonly classifyImage: (
+    imageBase64: string,
+  ) => Effect.Effect<{
+    type: ImageInfo['type']
+    description: string
+    isPureVector: boolean
+    complexity: number
+  }, LLMProviderError>
+
+  /** Generate a summary of content */
+  readonly summarize: (
+    content: string,
+    maxLength?: number,
+  ) => Effect.Effect<string, LLMProviderError>
+
+  /** Simple chat completion */
+  readonly chat: (prompt: string) => Effect.Effect<string, LLMProviderError>
+
+  /** Validate the API key and connection */
+  readonly validateConnection: () => Effect.Effect<boolean>
+
+  /** Get the estimated cost for processing a document */
+  readonly estimateCost: (pageCount: number, complexity: number) => number
+
+  /** Get the underlying provider instance (for legacy interop) */
+  readonly provider: LLMProvider
+}
+
+/**
+ * Effect Context.Tag for Gemini provider service.
+ * Use this to declare Gemini as a dependency in Effect programs.
+ *
+ * @example
+ * ```typescript
+ * const program = Effect.gen(function*() {
+ *   const gemini = yield* GeminiProviderTag
+ *   const analysis = yield* gemini.analyzeDocument(textContent)
+ *   // ...
+ * })
+ *
+ * // Provide the layer
+ * program.pipe(Effect.provide(GeminiProviderTag.make({ apiKey: 'AIza...' })))
+ * ```
+ */
+export class GeminiProviderTag extends Context.Tag('GeminiProvider')<
+  GeminiProviderTag,
+  GeminiProviderService
+>() {
+  /**
+   * Create a layer with the given configuration.
+   */
+  static readonly make = (config: GeminiProviderConfig) =>
+    Layer.succeed(GeminiProviderTag, createGeminiService(config))
+
+  /**
+   * Create a scoped layer that manages the provider lifecycle.
+   */
+  static readonly scoped = (config: GeminiProviderConfig) =>
+    Layer.scoped(
+      GeminiProviderTag,
+      Effect.gen(function*() {
+        const service = createGeminiService(config)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            // Cleanup if needed (Gemini SDK doesn't require explicit cleanup)
+          })
+        )
+        return service
+      }),
+    )
+}
+
+/**
+ * Helper function to create a Gemini service from config.
+ */
+function createGeminiService(config: GeminiProviderConfig): GeminiProviderService {
+  const provider = new GeminiProvider(config)
+
+  return {
+    name: 'gemini',
+    displayName: provider.displayName,
+    capabilities: provider.capabilities,
+    provider,
+
+    analyzeDocument: pdfData =>
+      Effect.tryPromise({
+        try: () => provider.analyzeDocument(pdfData),
+        catch: error =>
+          new DocumentAnalysisError({
+            message: `Failed to analyze document: ${(error as Error).message}`,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    extractStructure: (pdfData, analysis) =>
+      Effect.tryPromise({
+        try: () => provider.extractStructure(pdfData, analysis),
+        catch: error =>
+          new DocumentAnalysisError({
+            message: `Failed to extract structure: ${(error as Error).message}`,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    convertPage: (imageBase64, context) =>
+      Effect.tryPromise({
+        try: () => provider.convertPage(imageBase64, context),
+        catch: error =>
+          new PageConversionError({
+            message: `Failed to convert page: ${(error as Error).message}`,
+            pageNumber: context.pageNumber,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    convertWindow: (pdfData, context) =>
+      Effect.tryPromise({
+        try: () => provider.convertWindow(pdfData, context),
+        catch: error =>
+          new PageConversionError({
+            message: `Failed to convert window: ${(error as Error).message}`,
+            pageNumber: context.position.startPage,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    classifyImage: imageBase64 =>
+      Effect.tryPromise({
+        try: () => provider.classifyImage(imageBase64),
+        catch: error =>
+          new LLMProviderError({
+            message: `Failed to classify image: ${(error as Error).message}`,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    summarize: (content, maxLength) =>
+      Effect.tryPromise({
+        try: () => provider.summarize(content, maxLength),
+        catch: error =>
+          new LLMProviderError({
+            message: `Failed to summarize: ${(error as Error).message}`,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    chat: prompt =>
+      Effect.tryPromise({
+        try: () => provider.chat(prompt),
+        catch: error =>
+          new LLMProviderError({
+            message: `Chat failed: ${(error as Error).message}`,
+            provider: 'gemini',
+            cause: error,
+          }),
+      }),
+
+    validateConnection: () =>
+      Effect.tryPromise({
+        try: () => provider.validateConnection(),
+        catch: () => false,
+      }).pipe(Effect.catchAll(() => Effect.succeed(false))),
+
+    estimateCost: (pageCount, complexity) => provider.estimateCost(pageCount, complexity),
   }
 }

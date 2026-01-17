@@ -3,6 +3,78 @@
  * Supports multiple providers (Claude, Gemini) with a unified interface.
  */
 
+import { Schema } from 'effect'
+
+// ============================================================================
+// Error Types (Effect-style tagged errors)
+// ============================================================================
+
+/**
+ * Base error for LLM provider operations.
+ */
+export class LLMProviderError extends Schema.TaggedError<LLMProviderError>()('LLMProviderError', {
+  message: Schema.String,
+  provider: Schema.optional(Schema.String),
+  cause: Schema.optional(Schema.Defect),
+}) {}
+
+/**
+ * Error when provider is not configured (missing API key).
+ */
+export class ProviderNotConfiguredError extends Schema.TaggedError<ProviderNotConfiguredError>()(
+  'ProviderNotConfiguredError',
+  {
+    message: Schema.String,
+    providerType: Schema.String,
+  },
+) {}
+
+/**
+ * Error when API key validation fails.
+ */
+export class ApiKeyValidationError extends Schema.TaggedError<ApiKeyValidationError>()(
+  'ApiKeyValidationError',
+  {
+    message: Schema.String,
+    provider: Schema.String,
+  },
+) {}
+
+/**
+ * Error for document analysis failures.
+ */
+export class DocumentAnalysisError extends Schema.TaggedError<DocumentAnalysisError>()(
+  'DocumentAnalysisError',
+  {
+    message: Schema.String,
+    provider: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+/**
+ * Error for page conversion failures.
+ */
+export class PageConversionError extends Schema.TaggedError<PageConversionError>()(
+  'PageConversionError',
+  {
+    message: Schema.String,
+    pageNumber: Schema.Number,
+    provider: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+/**
+ * Union of all LLM-related errors for exhaustive handling.
+ */
+export type LLMError =
+  | LLMProviderError
+  | ProviderNotConfiguredError
+  | ApiKeyValidationError
+  | DocumentAnalysisError
+  | PageConversionError
+
 // ============================================================================
 // Document Analysis Types
 // ============================================================================
