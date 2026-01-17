@@ -55,7 +55,6 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         setMetadata(meta)
 
         // Also load raw pdfjs doc for canvas rendering
-        const pdfjsLib = await import('pdfjs-dist')
         const loadingTask = pdfjsLib.getDocument({ data: buffer })
         const doc = await loadingTask.promise
         setPdfDoc(doc)

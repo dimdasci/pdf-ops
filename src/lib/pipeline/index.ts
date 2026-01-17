@@ -226,7 +226,6 @@ export {
   processPagesBatch,
   processWindowsRobust,
   RateLimitError,
-  runEffect,
   TimeoutError,
   withRetry,
   withRobustness,

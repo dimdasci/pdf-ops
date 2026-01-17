@@ -21,7 +21,6 @@ import {
   type RateLimiter,
   RateLimitError,
   type RetryConfig,
-  runEffect,
   TimeoutError,
   withRetry,
   withRobustness,
@@ -85,8 +84,8 @@ export async function convertDocumentRobust(
 
   const errors: RobustConversionResult['errors'] = []
 
-  // Create rate limiter
-  const rateLimiter = await runEffect(createRateLimiter(rateLimitConfig))
+  // Create rate limiter (createRateLimiter returns Effect<RateLimiter, never>)
+  const rateLimiter = await Effect.runPromise(createRateLimiter(rateLimitConfig))
 
   // Wrap the conversion with robustness
   const robustConversion = withRobustness(
@@ -111,7 +110,13 @@ export async function convertDocumentRobust(
   )
 
   try {
-    const result = await runEffect(robustConversion)
+    // robustConversion has PipelineError in error channel
+    // Effect.runPromise will reject with the error, caught by try/catch below
+    const result = await Effect.runPromise(
+      robustConversion.pipe(
+        Effect.catchAll(error => Effect.die(error)),
+      ),
+    )
     return {
       ...result,
       errors,
@@ -121,8 +126,8 @@ export async function convertDocumentRobust(
     // If the entire conversion fails, return partial result
     if (continueOnError) {
       const pipelineError = error instanceof Error
-        ? new APIError(error.message)
-        : new APIError(String(error))
+        ? new APIError({ message: error.message })
+        : new APIError({ message: String(error) })
 
       errors.push({
         context: 'conversion',
@@ -196,13 +201,17 @@ function createRobustProvider(
       )
 
       try {
-        return await runEffect(effect)
+        // effect has PipelineError in error channel
+        // Convert to thrown error for try/catch handling
+        return await Effect.runPromise(
+          effect.pipe(Effect.catchAll(error => Effect.die(error))),
+        )
       } catch (error) {
         const pipelineError = error instanceof APIError
             || error instanceof RateLimitError
             || error instanceof TimeoutError
           ? error
-          : new APIError(error instanceof Error ? error.message : String(error))
+          : new APIError({ message: error instanceof Error ? error.message : String(error) })
 
         onError(pipelineError, context)
         throw error
@@ -274,7 +283,7 @@ export async function processPagesBatch(
             || error instanceof RateLimitError
             || error instanceof TimeoutError
           ? error
-          : new APIError(error instanceof Error ? error.message : String(error))
+          : new APIError({ message: error instanceof Error ? error.message : String(error) })
 
         onPageError?.(pageNum, pipelineError)
 
@@ -291,7 +300,10 @@ export async function processPagesBatch(
     },
   )
 
-  return runEffect(effect)
+  // Convert PipelineError to thrown error for Promise-based API
+  return Effect.runPromise(
+    effect.pipe(Effect.catchAll(error => Effect.die(error))),
+  )
 }
 
 // ============================================================================
@@ -344,22 +356,44 @@ export async function processWindowsRobust<T>(
             () => processor(window),
             retryConfig,
           ),
-          Effect.map(content => ({
+          Effect.map((content): { windowNum: number; content: string; error?: PipelineError } => ({
             windowNum: window.windowNum,
             content,
           })),
-          Effect.catchAll(error => {
-            const pipelineError = error as PipelineError
-            onWindowError?.(window.windowNum, pipelineError)
-
-            if (continueOnError) {
-              return Effect.succeed({
-                windowNum: window.windowNum,
-                content: '',
-                error: pipelineError,
-              })
-            }
-            return Effect.fail(error)
+          Effect.catchTags({
+            RateLimitError: e => {
+              onWindowError?.(window.windowNum, e)
+              if (continueOnError) {
+                return Effect.succeed({
+                  windowNum: window.windowNum,
+                  content: '',
+                  error: e,
+                })
+              }
+              return Effect.fail(e)
+            },
+            APIError: e => {
+              onWindowError?.(window.windowNum, e)
+              if (continueOnError) {
+                return Effect.succeed({
+                  windowNum: window.windowNum,
+                  content: '',
+                  error: e,
+                })
+              }
+              return Effect.fail(e)
+            },
+            TimeoutError: e => {
+              onWindowError?.(window.windowNum, e)
+              if (continueOnError) {
+                return Effect.succeed({
+                  windowNum: window.windowNum,
+                  content: '',
+                  error: e,
+                })
+              }
+              return Effect.fail(e)
+            },
           }),
         ),
       )
@@ -371,7 +405,10 @@ export async function processWindowsRobust<T>(
     return results
   })
 
-  return runEffect(effect as Effect.Effect<typeof results, never>)
+  // Convert PipelineError to thrown error for Promise-based API
+  return Effect.runPromise(
+    effect.pipe(Effect.catchAll(error => Effect.die(error))),
+  )
 }
 
 // ============================================================================
@@ -387,7 +424,6 @@ export {
   DEFAULT_RETRY_CONFIG,
   processWithConcurrency,
   RateLimitError,
-  runEffect,
   TimeoutError,
   // Re-export Effect utilities
   withRetry,

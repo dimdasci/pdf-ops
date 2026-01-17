@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { AlertCircle, CheckCircle, Key, Loader2, Save, X } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -76,7 +77,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
     try {
       // Simple validation by attempting a minimal API call
-      const { GoogleGenerativeAI } = await import('@google/generative-ai')
       const genAI = new GoogleGenerativeAI(geminiKey)
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
       await model.generateContent('test')

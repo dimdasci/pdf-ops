@@ -42,3 +42,6 @@ test-results/
 
 # Git worktrees
 .worktrees/
+
+# Electron builder output
+release/

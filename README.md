@@ -53,7 +53,18 @@ See [docs/architecture.md](docs/architecture.md) for details.
 npm install            # Install dependencies
 npm start              # Dev mode with HMR
 npm run build          # Production build
-npm run package        # Create distributable (electron-builder)
+npm run package:dir    # Unpacked app for testing (release/mac-arm64/)
+npm run package        # DMG installer (release/)
+```
+
+### Running Unsigned Builds (macOS)
+
+Builds without an Apple Developer certificate will be blocked by Gatekeeper. To run:
+
+```bash
+# After building with package:dir or package
+xattr -cr "release/mac-arm64/PDF Translator.app"
+open "release/mac-arm64/PDF Translator.app"
 ```
 
 ## Testing

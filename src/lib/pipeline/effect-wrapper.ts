@@ -5,45 +5,27 @@
  * and error handling for LLM API calls.
  */
 
-import { Duration, Effect, pipe, Ref, Schedule } from 'effect'
+import { Clock, Duration, Effect, pipe, Ref, Schedule, Schema } from 'effect'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-/** Error types for pipeline operations */
-export class RateLimitError extends Error {
-  readonly _tag = 'RateLimitError' as const
-  readonly retryAfterMs?: number
+/** Error types for pipeline operations using Schema.TaggedError pattern */
+export class RateLimitError extends Schema.TaggedError<RateLimitError>()('RateLimitError', {
+  message: Schema.String,
+  retryAfterMs: Schema.optional(Schema.Number),
+}) {}
 
-  constructor(message: string, retryAfterMs?: number) {
-    super(message)
-    this.name = 'RateLimitError'
-    this.retryAfterMs = retryAfterMs
-  }
-}
+export class APIError extends Schema.TaggedError<APIError>()('APIError', {
+  message: Schema.String,
+  statusCode: Schema.optional(Schema.Number),
+  isRetryable: Schema.optionalWith(Schema.Boolean, { default: () => false }),
+}) {}
 
-export class APIError extends Error {
-  readonly _tag = 'APIError' as const
-  readonly statusCode?: number
-  readonly isRetryable: boolean
-
-  constructor(message: string, statusCode?: number, isRetryable: boolean = false) {
-    super(message)
-    this.name = 'APIError'
-    this.statusCode = statusCode
-    this.isRetryable = isRetryable
-  }
-}
-
-export class TimeoutError extends Error {
-  readonly _tag = 'TimeoutError' as const
-
-  constructor(message: string) {
-    super(message)
-    this.name = 'TimeoutError'
-  }
-}
+export class TimeoutError extends Schema.TaggedError<TimeoutError>()('TimeoutError', {
+  message: Schema.String,
+}) {}
 
 export type PipelineError = RateLimitError | APIError | TimeoutError
 
@@ -156,11 +138,11 @@ export function classifyError(error: unknown): PipelineError {
     const message = error.message.toLowerCase()
 
     if (message.includes('rate limit') || message.includes('429')) {
-      return new RateLimitError(error.message)
+      return new RateLimitError({ message: error.message })
     }
 
     if (message.includes('timeout')) {
-      return new TimeoutError(error.message)
+      return new TimeoutError({ message: error.message })
     }
 
     // Check for HTTP status codes
@@ -168,13 +150,13 @@ export function classifyError(error: unknown): PipelineError {
     if (statusMatch) {
       const status = parseInt(statusMatch[1], 10)
       const isRetryable = status === 429 || status >= 500
-      return new APIError(error.message, status, isRetryable)
+      return new APIError({ message: error.message, statusCode: status, isRetryable })
     }
 
-    return new APIError(error.message, undefined, isRetryableError(error))
+    return new APIError({ message: error.message, isRetryable: isRetryableError(error) })
   }
 
-  return new APIError(String(error))
+  return new APIError({ message: String(error) })
 }
 
 // ============================================================================
@@ -205,31 +187,33 @@ export function createRateLimiter(
     const withRateLimit = <A, E>(
       effect: Effect.Effect<A, E>,
     ): Effect.Effect<A, E> =>
-      Effect.gen(function*() {
-        // Wait for semaphore permit
-        yield* Ref.update(concurrentCount, n => n + 1)
+      Effect.acquireUseRelease(
+        // Acquire: increment concurrent count
+        Ref.update(concurrentCount, n => n + 1),
+        // Use: enforce delay, execute with permit, update last call time
+        () =>
+          Effect.gen(function*() {
+            // Enforce minimum delay between requests
+            const now = yield* Clock.currentTimeMillis
+            const lastTime = yield* Ref.get(lastCallTime)
+            const elapsed = Number(now) - lastTime
 
-        try {
-          // Enforce minimum delay between requests
-          const now = Date.now()
-          const lastTime = yield* Ref.get(lastCallTime)
-          const elapsed = now - lastTime
+            if (elapsed < config.minDelayMs) {
+              yield* Effect.sleep(Duration.millis(config.minDelayMs - elapsed))
+            }
 
-          if (elapsed < config.minDelayMs) {
-            yield* Effect.sleep(Duration.millis(config.minDelayMs - elapsed))
-          }
+            // Execute with permit
+            const result = yield* semaphore.withPermits(1)(effect)
 
-          // Execute with permit
-          const result = yield* semaphore.withPermits(1)(effect)
+            // Update last call time
+            const updateTime = yield* Clock.currentTimeMillis
+            yield* Ref.set(lastCallTime, Number(updateTime))
 
-          // Update last call time
-          yield* Ref.set(lastCallTime, Date.now())
-
-          return result
-        } finally {
-          yield* Ref.update(concurrentCount, n => n - 1)
-        }
-      })
+            return result
+          }),
+        // Release: decrement concurrent count (always runs, even on error)
+        () => Ref.update(concurrentCount, n => n - 1),
+      )
 
     const getConcurrentCount = () => Ref.get(concurrentCount)
 
@@ -268,7 +252,7 @@ export function withRobustness<A>(
     effect,
     Effect.timeoutFail({
       duration: timeout,
-      onTimeout: () => new TimeoutError(`Operation timed out after ${timeout}`),
+      onTimeout: () => new TimeoutError({ message: `Operation timed out after ${timeout}` }),
     }),
   )
 
@@ -278,13 +262,6 @@ export function withRobustness<A>(
   }
 
   return effect
-}
-
-/**
- * Run an Effect and convert to Promise (for integration with existing code).
- */
-export async function runEffect<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
-  return Effect.runPromise(effect as Effect.Effect<A, never>)
 }
 
 /**
@@ -306,27 +283,25 @@ export function processWithConcurrency<T, R>(
   } = options
 
   return Effect.gen(function*() {
-    const semaphore = yield* Effect.makeSemaphore(concurrency)
     const completedRef = yield* Ref.make(0)
     const total = items.length
 
     const processItem = (item: T, index: number): Effect.Effect<R, PipelineError> =>
-      semaphore.withPermits(1)(
-        Effect.gen(function*() {
-          const result = yield* withRetry(() => processor(item, index), retryConfig)
+      Effect.gen(function*() {
+        const result = yield* withRetry(() => processor(item, index), retryConfig)
 
-          // Update progress
-          const completed = yield* Ref.updateAndGet(completedRef, n => n + 1)
-          onProgress?.(completed, total)
+        // Update progress
+        const completed = yield* Ref.updateAndGet(completedRef, n => n + 1)
+        onProgress?.(completed, total)
 
-          return result
-        }),
-      )
+        return result
+      })
 
     // Process all items with controlled concurrency
-    const results = yield* Effect.all(
-      items.map((item, index) => processItem(item, index)),
-      { concurrency: 'unbounded' }, // Semaphore handles actual concurrency
+    const results = yield* Effect.forEach(
+      items,
+      (item, index) => processItem(item, index),
+      { concurrency },
     )
 
     return results
@@ -337,11 +312,18 @@ export function processWithConcurrency<T, R>(
 // Progress Tracking
 // ============================================================================
 
+/** Progress state shape */
+export interface ProgressState {
+  current: number
+  total: number
+  status: string
+}
+
 export interface ProgressTracker {
   /** Update progress */
-  update: (current: number, total: number, status?: string) => void
+  update: (current: number, total: number, status?: string) => Effect.Effect<void>
   /** Get current progress */
-  getProgress: () => { current: number; total: number; status: string }
+  getProgress: () => Effect.Effect<ProgressState>
 }
 
 /**
@@ -351,15 +333,16 @@ export function createProgressTracker(
   onProgress?: (status: string, current: number, total: number) => void,
 ): Effect.Effect<ProgressTracker> {
   return Effect.gen(function*() {
-    const state = yield* Ref.make({ current: 0, total: 100, status: '' })
+    const state = yield* Ref.make<ProgressState>({ current: 0, total: 100, status: '' })
 
     return {
-      update: (current: number, total: number, status?: string) => {
-        const statusStr = status ?? ''
-        Ref.set(state, { current, total, status: statusStr })
-        onProgress?.(statusStr, current, total)
-      },
-      getProgress: () => Effect.runSync(Ref.get(state)),
+      update: (current: number, total: number, status?: string) =>
+        Effect.gen(function*() {
+          const statusStr = status ?? ''
+          yield* Ref.set(state, { current, total, status: statusStr })
+          onProgress?.(statusStr, current, total)
+        }),
+      getProgress: () => Ref.get(state),
     }
   })
 }
