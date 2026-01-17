@@ -1,0 +1,47 @@
+# PDF Translator - Claude Rules
+
+## Code Style (enforced by dprint/eslint)
+no-semi | single-quote | 2-space | trailing-comma | _unused prefix
+
+## Commands
+After edits: `npm run format && npm run lint:fix`
+Before claiming done: `npm run typecheck`
+Tests: `npm run test:e2e` or `PROVIDER=claude npm run test:e2e`
+
+## Architecture
+- Electron: main (node/fs/safeStorage) ↔ preload ↔ renderer (React/DOM)
+- Pipeline: complexity-classify → select pipeline → convert → merge
+- Effect.ts: retry/rate-limit via effect-wrapper.ts
+- Providers: Claude (native PDF) | Gemini (image-based)
+
+## Key Paths
+- src/lib/pipeline/ - Conversion pipelines
+- src/lib/llm/ - Provider abstraction
+- electron/ - Main process, IPC handlers
+- tests/fixtures/ - PDF fixtures with expected.json
+
+## Do NOT
+- Mock LLM responses in tests (E2E benchmarks exist)
+- Skip pre-commit hooks (--no-verify)
+- Use Promise directly in Effect code
+- Modify test fixtures without explicit request
+- Use try/catch inside Effect (use Effect.try)
+
+## Always
+- Check docs/architecture.md for design context
+- Use existing patterns from src/lib/pipeline/
+- Use TestClock for Effect time-based tests
+- Validate heading hierarchy (no skipped levels)
+- Return `yield* Effect.fail()` not throw
+
+## Plan Writing
+Location: docs/plans/YYYY-MM-DD-<slug>.md
+Format: super-condensed, max info density
+Structure: Goal | Context | Steps | Files | Verify
+Skip grammar for brevity. Prioritize clarity.
+
+## Testing Pyramid
+Unit (Effect): @effect/vitest, TestClock, pure logic
+Component: Vitest + RTL, data-testid selectors
+Integration: Playwright + Electron IPC
+Workflow: Real LLM, pre-merge only

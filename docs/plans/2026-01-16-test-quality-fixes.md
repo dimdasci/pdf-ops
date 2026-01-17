@@ -17,11 +17,13 @@
 ### Task 1: Remove Fluff Tests from SettingsModal
 
 **Files:**
+
 - Modify: `tests/components/SettingsModal.test.tsx`
 
 **Step 1: Read the file to locate fluff tests**
 
 Read `tests/components/SettingsModal.test.tsx` to find the exact line numbers for:
+
 - `renders modal content in document.body via portal`
 - `displays provider descriptions`
 - `displays security notice about encrypted storage`
@@ -59,6 +61,7 @@ EOF
 ### Task 2: Remove Dead Test from Workspace
 
 **Files:**
+
 - Modify: `tests/components/Workspace.test.tsx`
 
 **Step 1: Read the file to locate the dead test**
@@ -94,11 +97,13 @@ EOF
 ### Task 3: Remove Fluff Tests from effect-wrapper
 
 **Files:**
+
 - Modify: `tests/unit/effect-wrapper.test.ts`
 
 **Step 1: Read the file to locate fluff tests**
 
 Read `tests/unit/effect-wrapper.test.ts` to find tests that only assert `schedule` is truthy:
+
 - `creates schedule with configured max attempts`
 - `uses default config when not provided`
 
@@ -134,6 +139,7 @@ EOF
 ### Task 4: Strengthen Exponential Backoff Test
 
 **Files:**
+
 - Modify: `tests/unit/effect-wrapper.test.ts`
 
 **Step 1: Read the current test**
@@ -189,6 +195,7 @@ EOF
 ### Task 5: Fix Validation Status Test in SettingsModal
 
 **Files:**
+
 - Modify: `tests/components/SettingsModal.test.tsx`
 
 **Step 1: Read the current test**
@@ -214,7 +221,7 @@ it('resets validation status when key changes', async () => {
       isOpen={true}
       onClose={mockOnClose}
       onKeysChanged={mockOnKeysChanged}
-    />
+    />,
   )
 
   await waitFor(() => {
@@ -273,6 +280,7 @@ EOF
 ### Task 6: Improve Save Button Test in Workspace
 
 **Files:**
+
 - Modify: `tests/components/Workspace.test.tsx`
 
 **Step 1: Read the current test**
@@ -324,6 +332,7 @@ EOF
 ### Task 7: Add data-testid to DropZone
 
 **Files:**
+
 - Modify: `src/components/DropZone.tsx`
 
 **Step 1: Read the component**
@@ -333,6 +342,7 @@ Read `src/components/DropZone.tsx` to understand the structure.
 **Step 2: Add data-testid attributes**
 
 Add to key elements:
+
 - Main drop zone container: `data-testid="drop-zone"`
 - File input: `data-testid="file-input"`
 
@@ -363,6 +373,7 @@ EOF
 ### Task 8: Add data-testid to SettingsModal
 
 **Files:**
+
 - Modify: `src/components/SettingsModal.tsx`
 
 **Step 1: Read the component**
@@ -372,6 +383,7 @@ Read `src/components/SettingsModal.tsx` to understand the structure.
 **Step 2: Add data-testid attributes**
 
 Add to key elements:
+
 - Modal container: `data-testid="settings-modal"`
 - Gemini input: `data-testid="gemini-key-input"`
 - Anthropic input: `data-testid="anthropic-key-input"`
@@ -408,6 +420,7 @@ EOF
 ### Task 9: Add data-testid to Workspace
 
 **Files:**
+
 - Modify: `src/components/Workspace.tsx`
 
 **Step 1: Read the component**
@@ -417,6 +430,7 @@ Read `src/components/Workspace.tsx` to understand the structure.
 **Step 2: Add data-testid attributes**
 
 Add to key elements:
+
 - Page count display: `data-testid="page-count"`
 - Convert button: `data-testid="convert-button"`
 - Export/save button: `data-testid="export-button"`
@@ -458,6 +472,7 @@ EOF
 ### Task 10: Update DropZone Tests
 
 **Files:**
+
 - Modify: `tests/components/DropZone.test.tsx`
 
 **Step 1: Update selectors**
@@ -496,6 +511,7 @@ EOF
 ### Task 11: Update SettingsModal Tests
 
 **Files:**
+
 - Modify: `tests/components/SettingsModal.test.tsx`
 
 **Step 1: Update selectors**
@@ -532,6 +548,7 @@ EOF
 ### Task 12: Update Workflow Tests
 
 **Files:**
+
 - Modify: `tests/workflows/conversion-workflow.test.ts`
 
 **Step 1: Update selectors to use data-testid**
@@ -611,13 +628,13 @@ EOF
 
 ## Summary
 
-| Phase | Tasks | Description |
-|-------|-------|-------------|
-| 1 | 1-3 | Remove dead/fluff tests (~50 lines) |
-| 2 | 4-6 | Strengthen weak assertions |
-| 3 | 7-9 | Add data-testid to components |
-| 4 | 10-12 | Update tests to use data-testid |
-| 5 | 13 | Final verification |
+| Phase | Tasks | Description                         |
+| ----- | ----- | ----------------------------------- |
+| 1     | 1-3   | Remove dead/fluff tests (~50 lines) |
+| 2     | 4-6   | Strengthen weak assertions          |
+| 3     | 7-9   | Add data-testid to components       |
+| 4     | 10-12 | Update tests to use data-testid     |
+| 5     | 13    | Final verification                  |
 
 **Total Tasks:** 13
 **Estimated Removed Code:** ~50 lines of fluff tests

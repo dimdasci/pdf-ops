@@ -1,50 +1,86 @@
 # PDF to Markdown Translator
 
-A desktop application powered by Electron, React, and Google Gemini to convert PDF documents into structured Markdown files.
+Electron desktop app converting PDFs to structured Markdown using LLM vision (Claude/Gemini).
 
-## Features
+## Architecture
 
-- **Secure API Key Storage**: Safely stores your Google Gemini API key using `safeStorage`.
-- **PDF Viewer**: Built-in PDF viewer with page navigation.
-- **AI-Powered Conversion**: Uses Gemini 1.5 Flash for intelligent document analysis and conversion.
-  - **Structure Preservation**: Maintains headers, lists, and tables.
-  - **Image Handling**: Describes and references images.
-  - **Context Aware**: Converts page-by-page while maintaining context.
-- **Split-View Editor**: Preview the generated Markdown side-by-side with the PDF.
-- **Export**: Save the converted Markdown file to your disk.
+```
+┌─────────────────┐     IPC      ┌─────────────────┐
+│  Main Process   │◄────────────►│ Renderer Process│
+│ (electron/)     │   (preload)  │  (src/ React)   │
+├─────────────────┤              ├─────────────────┤
+│ Node.js, fs     │              │ React 19, DOM   │
+│ safeStorage     │              │ pdf.js viewer   │
+│ IPC handlers    │              │ Conversion UI   │
+└─────────────────┘              └─────────────────┘
+```
 
-## Installation
+**Pipeline Flow:**
 
-1. Clone the repository.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+```
+PDF → classifyComplexity() → select pipeline → multi-pass convert → merge
+```
+
+**Providers:** Claude (native PDF, 200K ctx) | Gemini (image-based, 2M ctx)
+
+See [docs/architecture.md](docs/architecture.md) for details.
 
 ## Development
 
-Run the application in development mode with hot-reloading:
-
 ```bash
-npm start
+npm install            # Install dependencies
+npm start              # Dev mode with HMR
+npm run build          # Production build
+npm run package        # Create distributable (electron-builder)
 ```
 
-## Build
-
-Build the application for production:
+## Testing
 
 ```bash
-npm run build
+npm run test:e2e                   # Conversion accuracy (Gemini)
+PROVIDER=claude npm run test:e2e   # With Claude provider
+npm run test:components            # React component tests
+npm run test:integration           # Electron IPC tests
+npm run test:unit                  # Effect unit tests
 ```
 
-The output will be in the `dist-electron` and `dist` directories. You can package it using `electron-builder` (configuration not included in this prototype but dependencies are installed).
+**Fixtures:** `tests/fixtures/{name}/source.pdf + expected.json`
 
-## Usage
+See [docs/requirements/testing.md](docs/requirements/testing.md) for test strategy.
 
-1. Launch the application.
-2. Click the Settings icon (gear) in the top right to enter your Google Gemini API Key.
-3. Drag and drop a PDF file onto the window or click to browse.
-4. Review the PDF in the left pane.
-5. Click **Convert** to start the process.
-6. Watch the Markdown generate in real-time on the right.
-7. Click the **Save** icon to export the result.
+## Code Quality
+
+```bash
+npm run format         # dprint formatter
+npm run lint:fix       # ESLint with auto-fix
+npm run typecheck      # TypeScript strict check
+```
+
+Pre-commit hooks run: typecheck → format → lint (via Husky).
+
+**Style:** no-semicolons, single-quotes, 2-space indent, trailing-commas.
+
+## Deployment
+
+**Build outputs:**
+
+- `dist/` - Renderer (Vite build)
+- `dist-electron/` - Main process
+
+**Packaging:** electron-builder config in `package.json`
+
+**API Keys:** Encrypted via `safeStorage` at `app.getPath('userData')/config.enc`
+
+## Key Files
+
+| Path                                 | Purpose                      |
+| ------------------------------------ | ---------------------------- |
+| `electron/main.ts`                   | Main process, IPC handlers   |
+| `electron/preload.ts`                | Context bridge (electronAPI) |
+| `src/lib/pipeline/index.ts`          | `convertDocument()` entry    |
+| `src/lib/llm/types.ts`               | LLMProvider interface        |
+| `src/lib/pipeline/effect-wrapper.ts` | Retry/rate-limit utilities   |
+
+## Tech Stack
+
+Electron | React 19 | TypeScript (strict) | Effect.ts | Vite | dprint | ESLint
