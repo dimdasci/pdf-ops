@@ -39,3 +39,6 @@ analysis-progress.md
 # Playwright
 playwright-report/
 test-results/
+
+# Git worktrees
+.worktrees/
