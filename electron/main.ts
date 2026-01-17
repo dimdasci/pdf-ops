@@ -70,10 +70,20 @@ const loadApiKeys = (): ApiKeys => {
   try {
     const configPath = getConfigPath()
     if (fs.existsSync(configPath)) {
-      const encrypted = fs.readFileSync(configPath)
+      const data = fs.readFileSync(configPath)
+
       if (safeStorage.isEncryptionAvailable()) {
-        const decrypted = safeStorage.decryptString(encrypted)
+        const decrypted = safeStorage.decryptString(data)
         return JSON.parse(decrypted)
+      }
+
+      // Fallback: try parsing as plain JSON (test/CI)
+      if (process.env.NODE_ENV === 'test' || process.env.CI) {
+        try {
+          return JSON.parse(data.toString())
+        } catch {
+          // File might be encrypted from a previous run, ignore
+        }
       }
     }
   } catch (e) {
@@ -83,12 +93,21 @@ const loadApiKeys = (): ApiKeys => {
 }
 
 const saveApiKeys = (keys: ApiKeys): boolean => {
+  const configPath = getConfigPath()
+
   if (safeStorage.isEncryptionAvailable()) {
     const encrypted = safeStorage.encryptString(JSON.stringify(keys))
-    const configPath = getConfigPath()
     fs.writeFileSync(configPath, encrypted)
     return true
   }
+
+  // Fallback: unencrypted storage for test/CI environments only
+  if (process.env.NODE_ENV === 'test' || process.env.CI) {
+    fs.writeFileSync(configPath, JSON.stringify(keys))
+    console.warn('SafeStorage unavailable - using unencrypted storage (test/CI only)')
+    return true
+  }
+
   console.warn('SafeStorage not available, cannot save keys securely.')
   return false
 }
