@@ -2,6 +2,28 @@
 
 Electron desktop app converting PDFs to structured Markdown using LLM vision (Claude/Gemini).
 
+## Prerequisites
+
+- **Node.js** 18+ (recommended: 20+)
+- **npm** 8+
+- **API Key** from [Anthropic](https://console.anthropic.com/) or [Google AI Studio](https://aistudio.google.com/)
+
+## Getting Started
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/dimdasci/pdf-translator.git
+cd pdf-translator
+
+# 2. Install dependencies
+npm install
+
+# 3. Start the application (development mode)
+npm start
+```
+
+On first launch, open Settings (gear icon) and enter your API key for Claude or Gemini.
+
 ## Architecture
 
 ```
