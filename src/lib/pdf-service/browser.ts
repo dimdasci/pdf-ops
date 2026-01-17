@@ -6,7 +6,6 @@
  */
 
 import { PDFDocument } from 'pdf-lib'
-import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import type {
   CropOptions,
@@ -18,10 +17,8 @@ import type {
   VectorRegion,
 } from './types'
 import { detectVectorRegionsFromOpList } from './vector-detector'
-
-// Set worker source for browser (Vite URL import)
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+// Import pdfjsLib from init module (worker already configured there)
+import { pdfjsLib } from './init'
 
 /**
  * Browser implementation of PdfService using PDF.js + browser canvas

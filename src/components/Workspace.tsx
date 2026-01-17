@@ -1,10 +1,19 @@
-import { ArrowLeft, BookOpen, FileCode, Loader2, Play, Save } from 'lucide-react'
-import * as pdfjsLib from 'pdfjs-dist'
+import {
+  AlertCircle,
+  ArrowLeft,
+  BookOpen,
+  FileCode,
+  Loader2,
+  Play,
+  RefreshCw,
+  Save,
+} from 'lucide-react'
 import React, { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { GeminiService } from '../lib/gemini'
 import { BrowserPdfService } from '../lib/pdf-service/browser'
+import { pdfjsLib } from '../lib/pdf-service/init'
 import type { OutlineItem, PdfMetadata } from '../lib/pdf-service/types'
 
 // Extended metadata with outline for Workspace component
@@ -31,6 +40,9 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
   const [currentPage, setCurrentPage] = useState(1)
   const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
   const [showOutline, setShowOutline] = useState(false)
+  const [isRendering, setIsRendering] = useState(false)
+  const [renderError, setRenderError] = useState<string | null>(null)
+  const [renderKey, setRenderKey] = useState(0)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -77,9 +89,13 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
     if (showOutline) return
 
     let renderTask: pdfjsLib.RenderTask | null = null
+    let cancelled = false
 
     const renderPage = async () => {
       if (!canvasRef.current || !pdfDoc) return
+
+      setIsRendering(true)
+      setRenderError(null)
 
       try {
         const page = await pdfDoc.getPage(currentPage)
@@ -98,21 +114,30 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
           })
           await renderTask.promise
         }
+        if (!cancelled) {
+          setIsRendering(false)
+        }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'RenderingCancelledException') {
           return
         }
         console.error('Page render error', err)
+        if (!cancelled) {
+          setIsRendering(false)
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+          setRenderError(`Failed to render page ${currentPage}: ${errorMessage}`)
+        }
       }
     }
     renderPage()
 
     return () => {
+      cancelled = true
       if (renderTask) {
         renderTask.cancel()
       }
     }
-  }, [pdfDoc, currentPage, showOutline])
+  }, [pdfDoc, currentPage, showOutline, renderKey])
 
   const handleConvert = async () => {
     if (!pdfService || !metadata) return
@@ -229,6 +254,12 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
     }
   }
 
+  // Retry rendering the current page
+  const handleRetryRender = () => {
+    setRenderError(null)
+    setRenderKey(prev => prev + 1)
+  }
+
   // Helper to render outline recursively
   const renderOutline = (items: OutlineItem[]) => {
     return (
@@ -326,18 +357,57 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
 
           <div className="flex-1 overflow-auto p-8 flex justify-center items-start">
             {isLoading
-              ? <div className="flex items-center gap-2 text-zinc-500">Loading PDF...</div>
+              ? (
+                <div className="flex items-center gap-2 text-zinc-500">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Loading PDF...
+                </div>
+              )
               : showOutline && metadata?.outline
               ? (
                 <div className="w-full max-w-lg">
                   {renderOutline(metadata.outline as OutlineItem[])}
                 </div>
               )
+              : renderError
+              ? (
+                <div
+                  data-testid="pdf-render-error"
+                  className="flex flex-col items-center gap-4 p-8 bg-zinc-800/50 rounded-lg border border-red-900/50"
+                >
+                  <AlertCircle className="w-10 h-10 text-red-500" />
+                  <div className="text-center">
+                    <p className="text-red-400 font-medium mb-1">Render Error</p>
+                    <p className="text-zinc-400 text-sm max-w-md">{renderError}</p>
+                  </div>
+                  <button
+                    onClick={handleRetryRender}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Retry
+                  </button>
+                </div>
+              )
               : (
-                <canvas
-                  ref={canvasRef}
-                  className="shadow-2xl border border-zinc-800/50 max-w-full h-auto"
-                />
+                <div className="relative">
+                  <canvas
+                    ref={canvasRef}
+                    className="shadow-2xl border border-zinc-800/50 max-w-full h-auto"
+                  />
+                  {/* Loading overlay for page renders */}
+                  {isRendering && (
+                    <div
+                      data-testid="pdf-render-loading"
+                      className="absolute inset-0 bg-zinc-900/70 flex items-center justify-center"
+                    >
+                      <div className="flex items-center gap-2 text-zinc-300">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span className="text-sm">Rendering page...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
           </div>
           {/* PDF Navigation */}
@@ -437,9 +507,40 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
                         />
                       ),
                       p: props => <p className="mb-4 leading-relaxed" {...props} />,
-                      a: props => (
-                        <a className="text-indigo-400 hover:text-indigo-300 underline" {...props} />
-                      ),
+                      a: ({ href, children, ...props }) => {
+                        const handleClick = (e: React.MouseEvent) => {
+                          e.preventDefault()
+
+                          if (!href) return
+
+                          // Internal anchor - scroll within preview
+                          if (href.startsWith('#')) {
+                            const element = document.getElementById(href.slice(1))
+                            element?.scrollIntoView({ behavior: 'smooth' })
+                            return
+                          }
+
+                          // External link - open in browser
+                          if (href.startsWith('http://') || href.startsWith('https://')) {
+                            window.electronAPI.openExternal(href)
+                            return
+                          }
+
+                          // Relative links - ignore or handle based on context
+                          console.warn('Unsupported link type:', href)
+                        }
+
+                        return (
+                          <a
+                            href={href}
+                            onClick={handleClick}
+                            className="text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+                            {...props}
+                          >
+                            {children}
+                          </a>
+                        )
+                      },
                     }}
                   >
                     {markdown}

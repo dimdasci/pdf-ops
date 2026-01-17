@@ -19,5 +19,7 @@ interface Window {
     // File system handlers
     readFileBuffer: (path: string) => Promise<Uint8Array>
     saveMarkdownFile: (content: string) => Promise<boolean>
+    // External link handler
+    openExternal: (url: string) => Promise<boolean>
   }
 }

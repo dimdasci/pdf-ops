@@ -20,4 +20,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File system handlers
   readFileBuffer: (path: string) => ipcRenderer.invoke('read-file-buffer', path),
   saveMarkdownFile: (content: string) => ipcRenderer.invoke('save-markdown-file', content),
+  // External link handler
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 })
