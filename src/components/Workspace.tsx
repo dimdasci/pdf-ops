@@ -57,9 +57,14 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         // Read file using Electron IPC
         const buffer = await window.electronAPI.readFileBuffer(filePath)
 
+        // Clone buffers to avoid detachment issues
+        // (ArrayBuffer becomes detached after transfer to Web Worker)
+        const serviceBuffer = buffer.slice(0)
+        const viewerBuffer = buffer.slice(0)
+
         // Create PDF service
         const service = new BrowserPdfService()
-        await service.load(buffer)
+        await service.load(serviceBuffer)
 
         const meta = await service.getMetadata()
 
@@ -67,7 +72,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ filePath, onClose }) => {
         setMetadata(meta)
 
         // Also load raw pdfjs doc for canvas rendering
-        const loadingTask = pdfjsLib.getDocument({ data: buffer })
+        const loadingTask = pdfjsLib.getDocument({ data: viewerBuffer })
         const doc = await loadingTask.promise
         setPdfDoc(doc)
       } catch (error) {
