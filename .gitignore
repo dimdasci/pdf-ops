@@ -35,3 +35,7 @@ analysis-progress.md
 
 # dprint cache
 .dprint/
+
+# Playwright
+playwright-report/
+test-results/

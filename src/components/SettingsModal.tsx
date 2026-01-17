@@ -105,15 +105,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
     }
   }
 
-  const renderStatusIcon = (status: ProviderStatus) => {
+  const renderStatusIcon = (status: ProviderStatus, testId: string) => {
     if (status.isChecking) {
-      return <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+      return <Loader2 data-testid={testId} className="w-4 h-4 animate-spin text-zinc-400" />
     }
     if (status.isValid === true) {
-      return <CheckCircle className="w-4 h-4 text-green-400" />
+      return <CheckCircle data-testid={testId} className="w-4 h-4 text-green-400" />
     }
     if (status.isValid === false) {
-      return <AlertCircle className="w-4 h-4 text-red-400" />
+      return <AlertCircle data-testid={testId} className="w-4 h-4 text-red-400" />
     }
     return null
   }
@@ -122,7 +122,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-6">
+      <div data-testid="settings-modal" className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
             <Key className="w-5 h-5 text-indigo-400" />
@@ -141,7 +141,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 Gemini API Key (Google)
               </label>
               <div className="flex items-center gap-2">
-                {renderStatusIcon(geminiStatus)}
+                {renderStatusIcon(geminiStatus, 'gemini-status')}
                 <button
                   onClick={validateGeminiKey}
                   disabled={!geminiKey || geminiStatus.isChecking}
@@ -152,6 +152,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               </div>
             </div>
             <input
+              data-testid="gemini-key-input"
               type="password"
               value={geminiKey}
               onChange={e => {
@@ -173,7 +174,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 Anthropic API Key (Claude)
               </label>
               <div className="flex items-center gap-2">
-                {renderStatusIcon(anthropicStatus)}
+                {renderStatusIcon(anthropicStatus, 'anthropic-status')}
                 <button
                   onClick={validateAnthropicKey}
                   disabled={!anthropicKey || anthropicStatus.isChecking}
@@ -184,6 +185,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               </div>
             </div>
             <input
+              data-testid="anthropic-key-input"
               type="password"
               value={anthropicKey}
               onChange={e => {
@@ -212,6 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 Cancel
               </button>
               <button
+                data-testid="save-settings"
                 onClick={handleSave}
                 disabled={isLoading || (!geminiKey && !anthropicKey)}
                 className={`
