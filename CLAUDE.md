@@ -1,184 +1,84 @@
-# PDF to Markdown Translator
+# PDF Translator
 
-## Project Overview
+Electron+React+TS app: PDF→Markdown via Gemini/Claude LLMs.
 
-Desktop application built with Electron and TypeScript to convert PDF documents into Markdown files using Gemini LLMs.
+## Quick Reference
 
-## Tech Stack
+| Category | Details                                                         |
+| -------- | --------------------------------------------------------------- |
+| Stack    | Electron \| React 19 \| TypeScript strict \| Effect.ts \| Vite  |
+| Style    | no-semi \| single-quote \| 2-space \| trailing-comma \| _unused |
+| Quality  | dprint → eslint → typecheck (pre-commit auto)                   |
 
-- **Framework**: Electron
-- **Language**: TypeScript (strict mode)
-- **UI**: React 19
-- **AI**: Google Gemini, Anthropic Claude
-- **Build**: Vite + Electron Builder
-- **Code Quality**: dprint (formatter), ESLint, Husky (git hooks)
+## Index
+
+| Topic         | Location                                                                                             |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| Architecture  | [docs/architecture.md](docs/architecture.md)                                                         |
+| Testing spec  | [docs/requirements/testing.md](docs/requirements/testing.md)                                         |
+| Test strategy | [docs/plans/2026-01-15-testing-strategy-design.md](docs/plans/2026-01-15-testing-strategy-design.md) |
+| E2E status    | [docs/requirements/e2e-testing-status.md](docs/requirements/e2e-testing-status.md)                   |
+
+## Commands
+
+```bash
+npm start              # Dev mode
+npm run build          # Production build
+npm run package        # Create distributable
+npm run test:e2e       # E2E tests (Gemini)
+PROVIDER=claude npm run test:e2e  # E2E with Claude
+npm run format         # dprint format
+npm run lint:fix       # ESLint fix
+npm run typecheck      # TS check
+```
 
 ## Architecture
 
-### Main Process
-
-- File system operations
-- Secure API key storage (electron-store with encryption or keytar)
-- PDF processing coordination
-
-### Renderer Process
-
-- React or Vue for UI (TBD)
-- PDF viewer component
-- Markdown editor/preview
-- Settings management
-
-## Core Features
-
-### 1. Settings
-
-- Gemini API key input
-- Secure storage of credentials
-
-### 2. Document Loading
-
-- Open file dialog
-- Drag-and-drop support
-- Display metadata: page count, creation date
-
-### 3. PDF Viewer
-
-- Page-by-page navigation
-- Table of contents display (if embedded)
-
-### 4. Conversion Pipeline (Multi-pass with Gemini)
-
-**Pass 1 - Document Analysis:**
-
-- Language detection
-- TOC presence and page ranges
-- Authors and dates
-- Count of tables and images
-
-**Pass 2 - Structure Extraction:**
-
-- Extract or infer document outline/TOC
-- Determine heading hierarchy
-
-**Pass 3 - Page-by-page Conversion:**
-
-- Provide document context and previous page content
-- Use reasoning prompts (detect images, tables, footnotes first)
-- Generate Markdown content
-
-### 5. Content Preservation
-
-- **Headers**: Correct hierarchy based on TOC
-- **Images**: Extract and embed as inline Markdown images
-- **Tables**: Preserve structure in Markdown format
-- **Footnotes**: Place after the paragraph where referenced
-
-### 6. Review Interface
-
-- Side-by-side view: PDF page | Markdown output
-- Edit capability for corrections
-
-### 7. Export
-
-- Save Markdown file to disk
-
-## Footnote Best Practices
-
-Recommended approach for footnotes in Markdown:
-
-1. Use inline footnote syntax: `[^1]` with definition `[^1]: footnote text`
-2. Place footnote definitions immediately after the paragraph containing the reference
-3. For academic documents, consider grouping at section end
-4. Maintain original numbering from PDF when possible
-
-## Development Commands
-
-```bash
-# Install dependencies
-npm install
-
-# Run in development (Vite dev server)
-npm run dev
-
-# Run Electron app in development
-npm start
-
-# Build for production
-npm run build
-
-# Package application
-npm run package
+```
+electron/          Main process, IPC handlers, preload
+src/lib/pipeline/  Conversion pipelines (direct|light|full|robust)
+src/lib/llm/       Provider abstraction (claude|gemini)
+src/lib/pdf-service/  Cross-env PDF handling
+src/components/    React UI components
 ```
 
-## Code Quality
+## Pipelines
 
-Pre-commit hooks automatically run on every commit:
+| Pipeline | Pages | Use Case                             |
+| -------- | ----- | ------------------------------------ |
+| direct   | 1-5   | Simple, no structure extraction      |
+| light    | 5-50  | Quick scan + sequential              |
+| full     | 50+   | Windowed processing                  |
+| robust   | any   | Effect.ts wrapper (retry/rate-limit) |
 
-```bash
-# Format code with dprint
-npm run format
+## Providers
 
-# Check formatting (CI)
-npm run format:check
+| Provider | PDF Support    | Context | Cost/page  | Notes               |
+| -------- | -------------- | ------- | ---------- | ------------------- |
+| Claude   | Native (100pg) | 200K    | $0.01-0.02 | Excellent structure |
+| Gemini   | Image-based    | 2M      | $0.001     | RECITATION filter   |
 
-# Run ESLint
-npm run lint
+## Plan Writing
 
-# Fix ESLint errors
-npm run lint:fix
+**Required for multi-file changes.**
 
-# TypeScript type checking
-npm run typecheck
-```
-
-**Pre-commit checks (automatic):**
-
-1. TypeScript type checking (all tsconfig files)
-2. dprint formatting (TS, JSON, Markdown)
-3. ESLint with auto-fix
-
-**Code style:**
-
-- No semicolons (ASI)
-- Single quotes
-- 2-space indentation
-- Trailing commas in multiline
-- Unused variables: prefix with `_`
-
-## Project Structure (Recommended)
-
-```
-src/
-├── main/           # Electron main process
-│   ├── index.ts
-│   ├── ipc/        # IPC handlers
-│   └── services/   # PDF processing, API calls
-├── renderer/       # UI layer
-│   ├── components/
-│   ├── pages/
-│   └── stores/
-├── shared/         # Shared types and utilities
-└── preload/        # Preload scripts
-```
-
-## Security Considerations
-
-- Store API keys using OS keychain (keytar) or encrypted storage
-- Validate all file inputs
-- Sanitize Markdown output
-- Use context isolation in Electron
+Location: `docs/plans/YYYY-MM-DD-<slug>.md`
+Format: super-condensed, max info density, skip grammar
+Structure: Goal \| Context \| Steps \| Files \| Verify
 
 ## Testing
 
-```bash
-# Run E2E tests (default: Gemini provider)
-npm run test:e2e
-
-# Run with Claude provider
-PROVIDER=claude npm run test:e2e
-
-# Watch mode
-npm run test:e2e:watch
+```
+Unit (Effect)     @effect/vitest, TestClock, pure logic
+Component         Vitest + RTL, data-testid selectors
+Integration       Playwright + Electron IPC
+Workflow          Real LLM, pre-merge only
 ```
 
-See [docs/requirements/testing.md](docs/requirements/testing.md) for E2E testing specification.
+Fixtures: `tests/fixtures/{name}/source.pdf + expected.json`
+
+## Security
+
+- API keys: safeStorage encryption
+- contextIsolation: true, nodeIntegration: false
+- Validate file paths in main process
