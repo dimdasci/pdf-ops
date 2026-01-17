@@ -4,10 +4,22 @@
  * Extracts content from PDF pages using layout and structure profiles.
  * Filters repeated elements, separates footnotes, tracks cross-page
  * paragraph continuity, and filters decorative images.
+ *
+ * Uses Effect.ts for retry logic and rate limiting.
  */
+
+import { Effect, pipe } from 'effect'
 
 import type { LLMProvider, PageContext } from '../llm/types'
 import type { PdfService } from '../pdf-service/types'
+import {
+  createRateLimiter,
+  DEFAULT_RETRY_CONFIG,
+  type PipelineError,
+  type RateLimiter,
+  withRetry,
+} from './effect-wrapper'
+import { ContentExtractionError } from './types/errors'
 import type {
   Footnote,
   ImageRef,
@@ -29,9 +41,15 @@ export interface ContentExtractorOptions {
   dpi?: number
   /** Batch size for parallel processing (default: 1 for sequential) */
   batchSize?: number
+  /** Maximum concurrent page extractions (default: 2) */
+  concurrency?: number
+  /** Minimum delay between LLM requests in ms (default: 500) */
+  minDelayMs?: number
 }
 
 interface PageExtractionResult {
+  /** Page number this result is for */
+  pageNumber: number
   /** Extracted sections from this page */
   sections: Section[]
   /** Footnotes found on this page */
@@ -56,109 +74,243 @@ interface ExtractionContext {
 }
 
 // =============================================================================
-// Main Export
+// Main Export (Effect-based)
 // =============================================================================
 
 /**
  * Extract content from a PDF document using layout and structure profiles.
  *
- * This is Pass 3 of the 4-pass pipeline. It processes each page sequentially,
- * filtering out repeated elements identified in the layout profile and
- * maintaining the heading structure from the structure profile.
+ * This is Pass 3 of the 4-pass pipeline. It processes each page with
+ * retry logic and rate limiting, filtering out repeated elements
+ * identified in the layout profile and maintaining the heading
+ * structure from the structure profile.
  *
  * @param pdfService - PDF service for rendering pages
  * @param provider - LLM provider for content extraction
  * @param layout - Layout profile from Pass 1
  * @param structure - Structure profile from Pass 2
  * @param options - Optional configuration
- * @returns Raw content with sections, footnotes, and images
+ * @returns Effect yielding raw content with sections, footnotes, and images
  */
-export async function extractContent(
+export function extractContent(
+  pdfService: PdfService,
+  provider: LLMProvider,
+  layout: LayoutProfile,
+  structure: StructureProfile,
+  options: ContentExtractorOptions = {},
+): Effect.Effect<RawContent, ContentExtractionError> {
+  return Effect.gen(function*() {
+    const {
+      onProgress,
+      dpi = 150,
+      concurrency = 2,
+      minDelayMs = 500,
+    } = options
+    const pageCount = pdfService.getPageCount()
+
+    // Create rate limiter for controlling LLM API calls
+    const rateLimiter = yield* createRateLimiter({
+      concurrency,
+      minDelayMs,
+    })
+
+    // Build page numbers array
+    const pageNumbers = Array.from({ length: pageCount }, (_, i) => i + 1)
+
+    // Process pages with rate limiting
+    // Note: We process sequentially for context continuity but with rate limiting
+    const results = yield* processPages(
+      pageNumbers,
+      pdfService,
+      provider,
+      layout,
+      structure,
+      dpi,
+      rateLimiter,
+      onProgress,
+    )
+
+    // Assemble results into RawContent
+    return assembleResults(results, structure)
+  }).pipe(
+    Effect.mapError(error => wrapError(error)),
+  )
+}
+
+/**
+ * Async wrapper for UI compatibility.
+ * Runs the Effect and returns a Promise.
+ */
+export async function extractContentAsync(
   pdfService: PdfService,
   provider: LLMProvider,
   layout: LayoutProfile,
   structure: StructureProfile,
   options: ContentExtractorOptions = {},
 ): Promise<RawContent> {
-  const { onProgress, dpi = 150, batchSize = 1 } = options
-  const pageCount = pdfService.getPageCount()
+  return Effect.runPromise(extractContent(pdfService, provider, layout, structure, options))
+}
 
+// =============================================================================
+// Page Processing
+// =============================================================================
+
+/**
+ * Process all pages with rate limiting and context tracking.
+ */
+function processPages(
+  pageNumbers: number[],
+  pdfService: PdfService,
+  provider: LLMProvider,
+  layout: LayoutProfile,
+  structure: StructureProfile,
+  dpi: number,
+  rateLimiter: RateLimiter,
+  onProgress?: (page: number, total: number) => void,
+): Effect.Effect<PageExtractionResult[], PipelineError | ContentExtractionError> {
+  return Effect.gen(function*() {
+    const pageCount = pageNumbers.length
+    const results: PageExtractionResult[] = []
+
+    // Track context across pages (sequential for context continuity)
+    const context: ExtractionContext = {
+      pageNumber: 0,
+      totalPages: pageCount,
+      previousSummary: '',
+      previousContent: '',
+      pendingSectionId: null,
+      currentTocEntry: findTocEntryForPage(structure.toc.entries, 1),
+    }
+
+    // Process pages sequentially to maintain context continuity
+    for (const pageNum of pageNumbers) {
+      context.pageNumber = pageNum
+      context.currentTocEntry = findTocEntryForPage(structure.toc.entries, pageNum)
+
+      // Extract page content with retry and rate limiting
+      const result = yield* pipe(
+        rateLimiter.withRateLimit(
+          extractPageContent(
+            pdfService,
+            provider,
+            layout,
+            structure,
+            { ...context },
+            dpi,
+          ),
+        ),
+        Effect.tap(() => Effect.sync(() => onProgress?.(pageNum, pageCount))),
+      )
+
+      results.push(result)
+
+      // Update context for next page
+      context.previousSummary = result.summary
+      context.previousContent = result.lastParagraph
+
+      // Track pending section ID for continuity
+      if (result.endsIncomplete && result.sections.length > 0) {
+        const lastSection = result.sections[result.sections.length - 1]
+        context.pendingSectionId = lastSection.id
+      } else {
+        context.pendingSectionId = null
+      }
+    }
+
+    return results
+  })
+}
+
+/**
+ * Extract content from a single page with retry logic.
+ */
+function extractPageContent(
+  pdfService: PdfService,
+  provider: LLMProvider,
+  layout: LayoutProfile,
+  structure: StructureProfile,
+  context: ExtractionContext,
+  dpi: number,
+): Effect.Effect<PageExtractionResult, PipelineError> {
+  return Effect.gen(function*() {
+    // Render page to image with retry
+    const imageBase64 = yield* withRetry(
+      () => pdfService.renderPage(context.pageNumber, { dpi }),
+      { ...DEFAULT_RETRY_CONFIG, maxAttempts: 3 },
+    )
+
+    // Build page context for LLM
+    const pageContext = buildPageContext(layout, structure, context)
+
+    // Convert page using LLM with retry
+    const result = yield* withRetry(
+      () => provider.convertPage(imageBase64, pageContext),
+      { ...DEFAULT_RETRY_CONFIG, maxAttempts: 3 },
+    )
+
+    // Parse the LLM response into structured content
+    return parsePageResult(
+      result.content,
+      result.images,
+      context,
+      layout,
+      structure,
+      result.summary,
+      result.lastParagraph,
+    )
+  })
+}
+
+/**
+ * Assemble page results into final RawContent.
+ */
+function assembleResults(
+  results: PageExtractionResult[],
+  _structure: StructureProfile,
+): RawContent {
   const sections: Section[] = []
   const footnotes = new Map<string, Footnote>()
   const images = new Map<string, ImageRef>()
   const pendingContinuations: string[] = []
 
-  const context: ExtractionContext = {
-    pageNumber: 0,
-    totalPages: pageCount,
-    previousSummary: '',
-    previousContent: '',
-    pendingSectionId: null,
-    currentTocEntry: findTocEntryForPage(structure.toc.entries, 1),
-  }
+  let previousContent = ''
+  let pendingSectionId: string | null = null
 
-  // Process pages in batches (sequential by default for better context)
-  for (let startPage = 1; startPage <= pageCount; startPage += batchSize) {
-    const endPage = Math.min(startPage + batchSize - 1, pageCount)
-    const pagesToProcess = []
-
-    for (let page = startPage; page <= endPage; page++) {
-      pagesToProcess.push(page)
-    }
-
-    // Process batch (sequentially within batch for context continuity)
-    for (const pageNum of pagesToProcess) {
-      onProgress?.(pageNum, pageCount)
-
-      context.pageNumber = pageNum
-      context.currentTocEntry = findTocEntryForPage(structure.toc.entries, pageNum)
-
-      const result = await extractPageContent(
-        pdfService,
-        provider,
-        layout,
-        structure,
-        context,
-        dpi,
-      )
-
-      // Collect sections
-      for (const section of result.sections) {
-        // Link continuation from previous page
-        if (context.pendingSectionId && section.continuesFrom === undefined) {
-          // Check if this section continues the previous one
-          if (shouldContinueSection(context.previousContent, section.content)) {
-            section.continuesFrom = context.pendingSectionId
-          }
-        }
-        sections.push(section)
-      }
-
-      // Collect footnotes
-      for (const footnote of result.footnotes) {
-        footnotes.set(footnote.id, footnote)
-      }
-
-      // Collect meaningful images
-      for (const image of result.images) {
-        if (!image.isDecorative) {
-          images.set(image.id, image)
+  for (const result of results) {
+    // Collect sections
+    for (const section of result.sections) {
+      // Link continuation from previous page
+      if (pendingSectionId && section.continuesFrom === undefined) {
+        // Check if this section continues the previous one
+        if (shouldContinueSection(previousContent, section.content)) {
+          section.continuesFrom = pendingSectionId
         }
       }
-
-      // Track incomplete paragraphs for continuation
-      if (result.endsIncomplete && result.sections.length > 0) {
-        const lastSection = result.sections[result.sections.length - 1]
-        context.pendingSectionId = lastSection.id
-        pendingContinuations.push(lastSection.id)
-      } else {
-        context.pendingSectionId = null
-      }
-
-      // Update context for next page
-      context.previousSummary = result.summary
-      context.previousContent = result.lastParagraph
+      sections.push(section)
     }
+
+    // Collect footnotes
+    for (const footnote of result.footnotes) {
+      footnotes.set(footnote.id, footnote)
+    }
+
+    // Collect meaningful images
+    for (const image of result.images) {
+      if (!image.isDecorative) {
+        images.set(image.id, image)
+      }
+    }
+
+    // Track incomplete paragraphs for continuation
+    if (result.endsIncomplete && result.sections.length > 0) {
+      const lastSection = result.sections[result.sections.length - 1]
+      pendingSectionId = lastSection.id
+      pendingContinuations.push(lastSection.id)
+    } else {
+      pendingSectionId = null
+    }
+
+    previousContent = result.lastParagraph
   }
 
   return {
@@ -169,41 +321,24 @@ export async function extractContent(
   }
 }
 
-// =============================================================================
-// Page Extraction
-// =============================================================================
-
 /**
- * Extract content from a single page.
+ * Wrap any error as ContentExtractionError.
  */
-async function extractPageContent(
-  pdfService: PdfService,
-  provider: LLMProvider,
-  layout: LayoutProfile,
-  structure: StructureProfile,
-  context: ExtractionContext,
-  dpi: number,
-): Promise<PageExtractionResult> {
-  // Render page to image
-  const imageBase64 = await pdfService.renderPage(context.pageNumber, { dpi })
+function wrapError(error: unknown): ContentExtractionError {
+  if (error instanceof ContentExtractionError) {
+    return error
+  }
 
-  // Build page context for LLM
-  const pageContext = buildPageContext(layout, structure, context)
-
-  // Convert page using LLM
-  const result = await provider.convertPage(imageBase64, pageContext)
-
-  // Parse the LLM response into structured content
-  return parsePageResult(
-    result.content,
-    result.images,
-    context,
-    layout,
-    structure,
-    result.summary,
-    result.lastParagraph,
-  )
+  const message = error instanceof Error ? error.message : String(error)
+  return new ContentExtractionError({
+    message: `Content extraction failed: ${message}`,
+    cause: error,
+  })
 }
+
+// =============================================================================
+// Page Context Building
+// =============================================================================
 
 /**
  * Build PageContext for the LLM provider.
@@ -239,7 +374,7 @@ function buildPageContext(
 function buildFilterPattern(patterns: string[]): string | null {
   if (patterns.length === 0) return null
   // Join patterns with OR for matching any
-  return patterns.map(escapeRegex).join('|')
+  return patterns.map(p => escapeRegex(p)).join('|')
 }
 
 /**
@@ -363,6 +498,7 @@ function parsePageResult(
     && trimmedContent.length > 0
 
   return {
+    pageNumber: context.pageNumber,
     sections,
     footnotes,
     images,

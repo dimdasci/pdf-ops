@@ -9,8 +9,11 @@
  * - Cross-reference handling configuration
  */
 
+import { Effect, pipe } from 'effect'
 import type { LLMProvider } from '../llm/types'
 import type { PdfService } from '../pdf-service/types'
+import { DEFAULT_RETRY_CONFIG, withRetry } from './effect-wrapper'
+import { StructureAnalysisError } from './types/errors'
 import type {
   CrossReferences,
   DocumentSections,
@@ -70,28 +73,53 @@ interface LLMStructureResponse {
  * @param pdfService - PDF service for text extraction
  * @param provider - LLM provider for structure analysis
  * @param layout - LayoutProfile from Pass 1
- * @returns StructureProfile describing document organization
+ * @returns Effect with StructureProfile or StructureAnalysisError
  */
-export async function analyzeStructure(
+export function analyzeStructure(
+  pdfService: PdfService,
+  provider: LLMProvider,
+  layout: LayoutProfile,
+): Effect.Effect<StructureProfile, StructureAnalysisError> {
+  return Effect.gen(function*() {
+    const pageCount = pdfService.getPageCount()
+
+    // Extract text from strategic pages, avoiding header/footer zones
+    const textSamples = yield* extractTextSamples(pdfService, layout, pageCount)
+
+    // Build the analysis prompt
+    const prompt = buildStructurePrompt(textSamples, layout, pageCount)
+
+    // Send to LLM for analysis with retry logic
+    const response = yield* pipe(
+      withRetry(() => provider.chat(prompt), {
+        ...DEFAULT_RETRY_CONFIG,
+        maxAttempts: 3,
+      }),
+      Effect.mapError(error =>
+        new StructureAnalysisError({
+          message: `LLM structure analysis failed: ${error.message}`,
+          cause: error,
+        })
+      ),
+    )
+
+    // Parse and validate the response
+    const parsed = yield* parseStructureResponse(response, pageCount)
+
+    return parsed
+  })
+}
+
+/**
+ * Async wrapper for UI compatibility.
+ * Runs the Effect and returns a Promise.
+ */
+export async function analyzeStructureAsync(
   pdfService: PdfService,
   provider: LLMProvider,
   layout: LayoutProfile,
 ): Promise<StructureProfile> {
-  const pageCount = pdfService.getPageCount()
-
-  // Extract text from strategic pages, avoiding header/footer zones
-  const textSamples = await extractTextSamples(pdfService, layout, pageCount)
-
-  // Build the analysis prompt
-  const prompt = buildStructurePrompt(textSamples, layout, pageCount)
-
-  // Send to LLM for analysis
-  const response = await provider.chat(prompt)
-
-  // Parse and validate the response
-  const parsed = parseStructureResponse(response, pageCount)
-
-  return parsed
+  return Effect.runPromise(analyzeStructure(pdfService, provider, layout))
 }
 
 // =============================================================================
@@ -102,34 +130,45 @@ export async function analyzeStructure(
  * Extract text from distributed pages, filtering out header/footer zones.
  * Samples pages at 5%, 20%, 40%, 60%, 80%, 95% positions for coverage.
  */
-async function extractTextSamples(
+function extractTextSamples(
   pdfService: PdfService,
   layout: LayoutProfile,
   pageCount: number,
-): Promise<Map<number, string>> {
-  const samples = new Map<number, string>()
+): Effect.Effect<Map<number, string>, StructureAnalysisError> {
+  return Effect.gen(function*() {
+    const samples = new Map<number, string>()
 
-  // Sample positions as percentages
-  const samplePositions = [0.05, 0.20, 0.40, 0.60, 0.80, 0.95]
+    // Sample positions as percentages
+    const samplePositions = [0.05, 0.20, 0.40, 0.60, 0.80, 0.95]
 
-  // Calculate actual page numbers
-  const pageNumbers = samplePositions
-    .map(pos => Math.max(1, Math.min(pageCount, Math.round(pos * pageCount))))
-    .filter((page, index, arr) => arr.indexOf(page) === index) // Remove duplicates
+    // Calculate actual page numbers
+    const pageNumbers = samplePositions
+      .map(pos => Math.max(1, Math.min(pageCount, Math.round(pos * pageCount))))
+      .filter((page, index, arr) => arr.indexOf(page) === index) // Remove duplicates
 
-  // For small documents, sample all pages
-  const pagesToSample = pageCount <= 10
-    ? Array.from({ length: pageCount }, (_, i) => i + 1)
-    : pageNumbers
+    // For small documents, sample all pages
+    const pagesToSample = pageCount <= 10
+      ? Array.from({ length: pageCount }, (_, i) => i + 1)
+      : pageNumbers
 
-  // Extract text from each sampled page
-  for (const pageNum of pagesToSample) {
-    const rawText = await pdfService.getPageText(pageNum)
-    const filteredText = filterHeaderFooter(rawText, layout)
-    samples.set(pageNum, filteredText)
-  }
+    // Extract text from each sampled page
+    for (const pageNum of pagesToSample) {
+      const rawText = yield* Effect.tryPromise({
+        try: () => pdfService.getPageText(pageNum),
+        catch: error =>
+          new StructureAnalysisError({
+            message: `Failed to extract text from page ${pageNum}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+            cause: error,
+          }),
+      })
+      const filteredText = filterHeaderFooter(rawText, layout)
+      samples.set(pageNum, filteredText)
+    }
 
-  return samples
+    return samples
+  })
 }
 
 /**
@@ -331,31 +370,43 @@ RESPOND ONLY WITH VALID JSON, NO MARKDOWN FORMATTING.`
 
 /**
  * Parse and validate the LLM response into a StructureProfile.
+ * Returns an Effect that succeeds with a StructureProfile (possibly defaults on parse failure).
  */
-function parseStructureResponse(response: string, pageCount: number): StructureProfile {
-  // Extract JSON from response (handle markdown code blocks)
-  const jsonMatch = response.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.warn('No JSON found in structure analysis response, using defaults')
-    return createDefaultStructureProfile(pageCount)
-  }
+function parseStructureResponse(
+  response: string,
+  pageCount: number,
+): Effect.Effect<StructureProfile, never> {
+  return Effect.gen(function*() {
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = response.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      yield* Effect.logWarning('No JSON found in structure analysis response, using defaults')
+      return createDefaultStructureProfile(pageCount)
+    }
 
-  let parsed: LLMStructureResponse
-  try {
-    parsed = JSON.parse(jsonMatch[0])
-  } catch (error) {
-    console.warn('Failed to parse structure analysis JSON, using defaults:', error)
-    return createDefaultStructureProfile(pageCount)
-  }
+    const parseResult = yield* Effect.try({
+      try: () => JSON.parse(jsonMatch[0]) as LLMStructureResponse,
+      catch: error => error,
+    }).pipe(Effect.either)
 
-  // Validate and transform the response
-  return {
-    documentType: validateDocumentType(parsed.documentType),
-    toc: validateToc(parsed.toc, pageCount),
-    hierarchy: validateHierarchy(parsed.hierarchy),
-    sections: validateSections(parsed.sections, pageCount),
-    crossReferences: validateCrossReferences(parsed.crossReferences),
-  }
+    if (parseResult._tag === 'Left') {
+      yield* Effect.logWarning(
+        `Failed to parse structure analysis JSON, using defaults: ${parseResult.left}`,
+      )
+      return createDefaultStructureProfile(pageCount)
+    }
+
+    const parsed = parseResult.right
+
+    // Validate and transform the response
+    return {
+      documentType: validateDocumentType(parsed.documentType),
+      toc: validateToc(parsed.toc, pageCount),
+      hierarchy: validateHierarchy(parsed.hierarchy),
+      sections: validateSections(parsed.sections, pageCount),
+      crossReferences: validateCrossReferences(parsed.crossReferences),
+    }
+  })
 }
 
 /**

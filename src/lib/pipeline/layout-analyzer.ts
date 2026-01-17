@@ -11,8 +11,11 @@
  * Uses cheap model (Haiku/Flash) for cost efficiency.
  */
 
+import { Effect, pipe } from 'effect'
 import type { LLMProvider } from '../llm/types'
 import type { PdfService } from '../pdf-service/types'
+import { DEFAULT_RETRY_CONFIG, withRetry } from './effect-wrapper'
+import { LayoutAnalysisError } from './types/errors'
 import type {
   DecorativeImagePosition,
   DecorativeImages,
@@ -65,52 +68,64 @@ interface PageLayoutAnalysis {
  * @param pdfService - Initialized PDF service with loaded document
  * @param provider - LLM provider for analysis
  * @param options - Analysis options
- * @returns Layout profile describing visual structure patterns
+ * @returns Effect producing LayoutProfile describing visual structure patterns
  */
-export async function analyzeLayout(
+export function analyzeLayout(
   pdfService: PdfService,
   provider: LLMProvider,
   options: LayoutAnalyzerOptions = {},
-): Promise<LayoutProfile> {
+): Effect.Effect<LayoutProfile, LayoutAnalysisError> {
   const {
     onProgress,
     dpi = 150,
     samplePositions = [10, 30, 50, 70, 90],
   } = options
 
-  const pageCount = pdfService.getPageCount()
-  onProgress?.('Analyzing document layout...', 0, samplePositions.length)
+  return Effect.gen(function*() {
+    const pageCount = pdfService.getPageCount()
+    onProgress?.('Analyzing document layout...', 0, samplePositions.length)
 
-  // Calculate which pages to sample
-  const samplePages = calculateSamplePages(pageCount, samplePositions)
+    // Calculate which pages to sample
+    const samplePages = calculateSamplePages(pageCount, samplePositions)
 
-  // Analyze each sample page
-  const pageAnalyses: PageLayoutAnalysis[] = []
+    // Analyze each sample page
+    const pageAnalyses: PageLayoutAnalysis[] = []
 
-  for (let i = 0; i < samplePages.length; i++) {
-    const pageNum = samplePages[i]
-    onProgress?.(
-      `Analyzing layout of page ${pageNum}...`,
-      i,
-      samplePages.length,
-    )
+    for (let i = 0; i < samplePages.length; i++) {
+      const pageNum = samplePages[i]
+      onProgress?.(
+        `Analyzing layout of page ${pageNum}...`,
+        i,
+        samplePages.length,
+      )
 
-    const imageBase64 = await pdfService.renderPage(pageNum, { dpi })
-    const pageText = await pdfService.getPageText(pageNum)
-    const analysis = await analyzePageLayout(
-      provider,
-      imageBase64,
-      pageText,
-      pageNum,
-      pageCount,
-    )
-    pageAnalyses.push(analysis)
-  }
+      const analysis = yield* analyzePageLayout(
+        pdfService,
+        provider,
+        pageNum,
+        pageCount,
+        dpi,
+      )
+      pageAnalyses.push(analysis)
+    }
 
-  onProgress?.('Aggregating layout patterns...', samplePages.length, samplePages.length)
+    onProgress?.('Aggregating layout patterns...', samplePages.length, samplePages.length)
 
-  // Cross-compare and aggregate results
-  return aggregateLayoutAnalyses(pageAnalyses, samplePages)
+    // Cross-compare and aggregate results
+    return aggregateLayoutAnalyses(pageAnalyses, samplePages)
+  })
+}
+
+/**
+ * Async wrapper for UI compatibility.
+ * Runs the Effect and returns a Promise.
+ */
+export async function analyzeLayoutAsync(
+  pdfService: PdfService,
+  provider: LLMProvider,
+  options: LayoutAnalyzerOptions = {},
+): Promise<LayoutProfile> {
+  return Effect.runPromise(analyzeLayout(pdfService, provider, options))
 }
 
 // ============================================================================
@@ -207,50 +222,58 @@ Respond in JSON format only:
 
 /**
  * Parse LLM response into PageLayoutAnalysis.
+ * Returns Effect to enable proper error handling.
  */
-function parseLayoutResponse(response: string, pageNumber: number): PageLayoutAnalysis {
-  // Extract JSON from response (handle markdown code blocks)
-  const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, response]
-  const jsonStr = jsonMatch[1]?.trim() || response.trim()
+function parseLayoutResponse(
+  response: string,
+  pageNumber: number,
+): Effect.Effect<PageLayoutAnalysis, LayoutAnalysisError> {
+  return Effect.try({
+    try: () => {
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, response]
+      const jsonStr = jsonMatch[1]?.trim() || response.trim()
 
-  // Try to find JSON object in the response
-  const objectMatch = jsonStr.match(/\{[\s\S]*\}/)
-  const finalJson = objectMatch ? objectMatch[0] : jsonStr
+      // Try to find JSON object in the response
+      const objectMatch = jsonStr.match(/\{[\s\S]*\}/)
+      const finalJson = objectMatch ? objectMatch[0] : jsonStr
 
-  try {
-    const parsed = JSON.parse(finalJson)
+      const parsed = JSON.parse(finalJson)
 
-    return {
-      pageNumber,
-      headerZone: {
-        top: clamp(parsed.headerZone?.top ?? 0, 0, 100),
-        bottom: clamp(parsed.headerZone?.bottom ?? 10, 0, 100),
-      },
-      footerZone: {
-        top: clamp(parsed.footerZone?.top ?? 90, 0, 100),
-        bottom: clamp(parsed.footerZone?.bottom ?? 100, 0, 100),
-      },
-      marginZones: {
-        left: clamp(parsed.marginZones?.left ?? 5, 0, 50),
-        right: clamp(parsed.marginZones?.right ?? 95, 50, 100),
-      },
-      headerText: parsed.headerText ?? null,
-      footerText: parsed.footerText ?? null,
-      pageNumberPattern: parsed.pageNumberPattern ?? null,
-      decorativeImages: Array.isArray(parsed.decorativeImages)
-        ? parsed.decorativeImages.map((img: { zone?: string; description?: string }) => ({
-          zone: validateZone(img.zone),
-          description: String(img.description ?? ''),
-        }))
-        : [],
-      footnoteStyle: validateFootnoteStyle(parsed.footnoteStyle),
-      columnLayout: validateColumnLayout(parsed.columnLayout),
-    }
-  } catch {
-    // Return safe defaults on parse failure
-    console.warn(`Failed to parse layout analysis for page ${pageNumber}`)
-    return getDefaultPageAnalysis(pageNumber)
-  }
+      return {
+        pageNumber,
+        headerZone: {
+          top: clamp(parsed.headerZone?.top ?? 0, 0, 100),
+          bottom: clamp(parsed.headerZone?.bottom ?? 10, 0, 100),
+        },
+        footerZone: {
+          top: clamp(parsed.footerZone?.top ?? 90, 0, 100),
+          bottom: clamp(parsed.footerZone?.bottom ?? 100, 0, 100),
+        },
+        marginZones: {
+          left: clamp(parsed.marginZones?.left ?? 5, 0, 50),
+          right: clamp(parsed.marginZones?.right ?? 95, 50, 100),
+        },
+        headerText: parsed.headerText ?? null,
+        footerText: parsed.footerText ?? null,
+        pageNumberPattern: parsed.pageNumberPattern ?? null,
+        decorativeImages: Array.isArray(parsed.decorativeImages)
+          ? parsed.decorativeImages.map((img: { zone?: string; description?: string }) => ({
+            zone: validateZone(img.zone),
+            description: String(img.description ?? ''),
+          }))
+          : [],
+        footnoteStyle: validateFootnoteStyle(parsed.footnoteStyle),
+        columnLayout: validateColumnLayout(parsed.columnLayout),
+      }
+    },
+    catch: error =>
+      new LayoutAnalysisError({
+        message: `Failed to parse layout response for page ${pageNumber}`,
+        pageNumber,
+        cause: error,
+      }),
+  })
 }
 
 /**
@@ -259,51 +282,94 @@ function parseLayoutResponse(response: string, pageNumber: number): PageLayoutAn
  * Uses convertPage to send the image with context, then uses chat
  * for the detailed layout analysis prompt.
  */
-async function analyzePageLayout(
+function analyzePageLayout(
+  pdfService: PdfService,
   provider: LLMProvider,
-  imageBase64: string,
-  pageText: string,
   pageNumber: number,
   totalPages: number,
-): Promise<PageLayoutAnalysis> {
-  const prompt = buildLayoutAnalysisPrompt(pageText, pageNumber, totalPages)
-
-  try {
-    // Use convertPage to analyze the image
-    // The provider will see the image and our context includes layout analysis request
-    const result = await provider.convertPage(imageBase64, {
-      pageNumber,
-      totalPages,
-      previousContent: '',
-      previousSummary: prompt, // Embed our analysis prompt in the summary field
-      expectedHeadings: [],
-      currentSection: 'LAYOUT_ANALYSIS', // Signal this is a special analysis request
-      headerPattern: null,
-      footerPattern: null,
-      language: 'Unknown',
+  dpi: number,
+): Effect.Effect<PageLayoutAnalysis, LayoutAnalysisError> {
+  return Effect.gen(function*() {
+    // Render page image
+    const imageBase64 = yield* Effect.tryPromise({
+      try: () => pdfService.renderPage(pageNumber, { dpi }),
+      catch: error =>
+        new LayoutAnalysisError({
+          message: `Failed to render page ${pageNumber}`,
+          pageNumber,
+          cause: error,
+        }),
     })
 
-    // The content may have the JSON analysis embedded
-    // Try to parse it from the response
-    const analysis = parseLayoutResponse(result.content, pageNumber)
+    // Get page text
+    const pageText = yield* Effect.tryPromise({
+      try: () => pdfService.getPageText(pageNumber),
+      catch: error =>
+        new LayoutAnalysisError({
+          message: `Failed to get text for page ${pageNumber}`,
+          pageNumber,
+          cause: error,
+        }),
+    })
 
-    // If we didn't get valid analysis from convertPage, try chat as fallback
+    const prompt = buildLayoutAnalysisPrompt(pageText, pageNumber, totalPages)
+
+    // Try convertPage first with retry logic
+    const convertPageResult = yield* pipe(
+      withRetry(
+        () =>
+          provider.convertPage(imageBase64, {
+            pageNumber,
+            totalPages,
+            previousContent: '',
+            previousSummary: prompt,
+            expectedHeadings: [],
+            currentSection: 'LAYOUT_ANALYSIS',
+            headerPattern: null,
+            footerPattern: null,
+            language: 'Unknown',
+          }),
+        { ...DEFAULT_RETRY_CONFIG, maxAttempts: 3 },
+      ),
+      Effect.mapError(error =>
+        new LayoutAnalysisError({
+          message: `Layout analysis failed for page ${pageNumber}`,
+          pageNumber,
+          cause: error,
+        })
+      ),
+    )
+
+    // Try to parse the response
+    const analysis = yield* pipe(
+      parseLayoutResponse(convertPageResult.content, pageNumber),
+      Effect.catchAll(() => Effect.succeed(getDefaultPageAnalysis(pageNumber))),
+    )
+
+    // If we got default analysis from convertPage, try chat as fallback
     if (isDefaultAnalysis(analysis)) {
-      const chatResponse = await provider.chat(prompt)
-      return parseLayoutResponse(chatResponse, pageNumber)
+      return yield* pipe(
+        withRetry(
+          () => provider.chat(prompt),
+          { ...DEFAULT_RETRY_CONFIG, maxAttempts: 3 },
+        ),
+        Effect.mapError(error =>
+          new LayoutAnalysisError({
+            message: `Chat fallback failed for page ${pageNumber}`,
+            pageNumber,
+            cause: error,
+          })
+        ),
+        Effect.flatMap(chatResponse => parseLayoutResponse(chatResponse, pageNumber)),
+        Effect.catchAll(() => Effect.succeed(getDefaultPageAnalysis(pageNumber))),
+      )
     }
 
     return analysis
-  } catch (error) {
-    console.warn(`Layout analysis failed for page ${pageNumber}:`, error)
-    // Fallback: try chat-only approach
-    try {
-      const chatResponse = await provider.chat(prompt)
-      return parseLayoutResponse(chatResponse, pageNumber)
-    } catch {
-      return getDefaultPageAnalysis(pageNumber)
-    }
-  }
+  }).pipe(
+    // Final fallback: if everything fails, return default analysis
+    Effect.catchAll(() => Effect.succeed(getDefaultPageAnalysis(pageNumber))),
+  )
 }
 
 /**
@@ -414,7 +480,7 @@ function findSimilarPatterns(texts: string[]): string[] {
   if (texts.length === 0) return []
 
   // Normalize and count occurrences
-  const normalized = texts.map(normalizeText)
+  const normalized = texts.map(t => normalizeText(t))
   const counts = new Map<string, { original: string; count: number }>()
 
   for (let i = 0; i < normalized.length; i++) {

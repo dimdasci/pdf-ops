@@ -15,7 +15,7 @@ import {
 } from './complexity-classifier'
 import { type DirectPipelineResult, runDirectPipeline } from './direct-pipeline'
 import { type FullPipelineResult, runFullPipeline } from './full-pipeline'
-import { type IntelligentPipelineResult, runIntelligentPipeline } from './intelligent-pipeline'
+import { type IntelligentPipelineResult, runIntelligentPipelineAsync } from './intelligent-pipeline'
 import { type LightPipelineResult, runLightPipeline } from './light-pipeline'
 
 // ============================================================================
@@ -131,7 +131,7 @@ export async function convertDocument(
     }
 
     case 'intelligent': {
-      const intelligentResult = await runIntelligentPipeline(pdfService, provider, {
+      const intelligentResult = await runIntelligentPipelineAsync(pdfService, provider, {
         onProgress: (status, phase, totalPhases) => {
           const percent = 5 + Math.floor((phase / totalPhases) * 90)
           onProgress?.(status, percent, 100)
@@ -311,6 +311,6 @@ export type {
 } from './robust-pipeline'
 
 // Intelligent 4-pass pipeline
-export { runIntelligentPipeline } from './intelligent-pipeline'
+export { runIntelligentPipeline, runIntelligentPipelineAsync } from './intelligent-pipeline'
 
 export type { IntelligentPipelineOptions, IntelligentPipelineResult } from './intelligent-pipeline'

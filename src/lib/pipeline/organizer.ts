@@ -13,7 +13,9 @@
  * - Final cleanup pass
  */
 
+import { Effect } from 'effect'
 import type { LLMProvider } from '../llm/types'
+import { OrganizationError } from './types/errors'
 import type {
   DocumentType,
   Footnote,
@@ -373,128 +375,188 @@ function renderSection(
  * @param structure - Structure profile from Pass 2
  * @param _provider - Optional LLM provider for cleanup pass (reserved for future use)
  * @param options - Organization options
- * @returns Final markdown string
+ * @returns Effect that produces final markdown string or OrganizationError
  */
-export async function organizeContent(
+export function organizeContent(
   rawContent: RawContent,
   structure: StructureProfile,
   _provider?: LLMProvider,
   options: OrganizeOptions = {},
-): Promise<string> {
-  const {
-    includeToc = true,
-    tocMaxLevel = 3,
-    addSectionSpacing = true,
-  } = options
+): Effect.Effect<string, OrganizationError> {
+  return Effect.gen(function*() {
+    const {
+      includeToc = true,
+      tocMaxLevel = 3,
+      addSectionSpacing = true,
+    } = options
 
-  const output: string[] = []
+    const output: string[] = []
 
-  // Step 1: Merge continued sections
-  const mergedSections = mergeContinuedSections(rawContent.sections)
+    // Step 1: Merge continued sections
+    const mergedSections = yield* Effect.try({
+      try: () => mergeContinuedSections(rawContent.sections),
+      catch: error =>
+        new OrganizationError({
+          message: 'Failed to merge continued sections',
+          cause: error,
+        }),
+    })
 
-  // Step 2: Validate heading hierarchy
-  const headingValidations = validateHeadingHierarchy(mergedSections)
+    // Step 2: Validate heading hierarchy
+    const headingValidations = yield* Effect.try({
+      try: () => validateHeadingHierarchy(mergedSections),
+      catch: error =>
+        new OrganizationError({
+          message: 'Failed to validate heading hierarchy',
+          cause: error,
+        }),
+    })
 
-  // Step 3: Determine footnote placement strategy
-  const footnotePlacement = getFootnotePlacement(structure.documentType)
+    // Step 3: Determine footnote placement strategy
+    const footnotePlacement = getFootnotePlacement(structure.documentType)
 
-  // Step 4: Generate TOC if requested and available
-  if (includeToc && structure.toc.entries.length > 0) {
-    output.push(generateToc(structure.toc.entries, tocMaxLevel))
-  }
-
-  // Step 5: Render sections with footnotes based on placement strategy
-  const usedFootnotes = new Set<string>()
-  const sectionFootnotes: Map<string, Array<{ id: string; footnote: Footnote }>> = new Map()
-  const documentFootnotes: Array<{ id: string; footnote: Footnote }> = []
-
-  // Track which level 1 sections own which footnotes (for chapter-end placement)
-  let currentChapterId: string | null = null
-
-  for (const section of mergedSections) {
-    const validation = headingValidations.get(section.id)
-    const headingLevel = validation?.corrected ?? section.level
-
-    // Track chapter for chapter-end footnotes
-    if (headingLevel === 1) {
-      currentChapterId = section.id
+    // Step 4: Generate TOC if requested and available
+    if (includeToc && structure.toc.entries.length > 0) {
+      const toc = yield* Effect.try({
+        try: () => generateToc(structure.toc.entries, tocMaxLevel),
+        catch: error =>
+          new OrganizationError({
+            message: 'Failed to generate table of contents',
+            cause: error,
+          }),
+      })
+      output.push(toc)
     }
 
-    // Render section content
-    const sectionMarkdown = renderSection(section, headingLevel, rawContent.images)
+    // Step 5: Render sections with footnotes based on placement strategy
+    const usedFootnotes = new Set<string>()
+    const sectionFootnotes: Map<string, Array<{ id: string; footnote: Footnote }>> = new Map()
+    const documentFootnotes: Array<{ id: string; footnote: Footnote }> = []
 
-    if (sectionMarkdown.trim()) {
-      output.push(sectionMarkdown)
+    // Track which level 1 sections own which footnotes (for chapter-end placement)
+    let currentChapterId: string | null = null
 
-      if (addSectionSpacing) {
-        output.push('')
+    for (const section of mergedSections) {
+      const validation = headingValidations.get(section.id)
+      const headingLevel = validation?.corrected ?? section.level
+
+      // Track chapter for chapter-end footnotes
+      if (headingLevel === 1) {
+        currentChapterId = section.id
       }
-    }
 
-    // Collect footnotes for this section
-    for (const refId of section.footnoteRefs) {
-      if (usedFootnotes.has(refId)) continue
+      // Render section content
+      const sectionMarkdown = yield* Effect.try({
+        try: () => renderSection(section, headingLevel, rawContent.images),
+        catch: error =>
+          new OrganizationError({
+            message: `Failed to render section: ${section.id}`,
+            cause: error,
+          }),
+      })
 
-      const footnote = rawContent.footnotes.get(refId)
-      if (!footnote) continue
+      if (sectionMarkdown.trim()) {
+        output.push(sectionMarkdown)
 
-      usedFootnotes.add(refId)
-
-      if (footnotePlacement === 'inline') {
-        // Add footnote immediately after section
-        output.push(formatFootnote(refId, footnote))
-        output.push('')
-      } else if (footnotePlacement === 'section-end' && currentChapterId) {
-        // Collect for chapter/section end
-        if (!sectionFootnotes.has(currentChapterId)) {
-          sectionFootnotes.set(currentChapterId, [])
+        if (addSectionSpacing) {
+          output.push('')
         }
-        sectionFootnotes.get(currentChapterId)!.push({ id: refId, footnote })
-      } else {
-        // Document end
-        documentFootnotes.push({ id: refId, footnote })
+      }
+
+      // Collect footnotes for this section
+      for (const refId of section.footnoteRefs) {
+        if (usedFootnotes.has(refId)) continue
+
+        const footnote = rawContent.footnotes.get(refId)
+        if (!footnote) continue
+
+        usedFootnotes.add(refId)
+
+        if (footnotePlacement === 'inline') {
+          // Add footnote immediately after section
+          output.push(formatFootnote(refId, footnote))
+          output.push('')
+        } else if (footnotePlacement === 'section-end' && currentChapterId) {
+          // Collect for chapter/section end
+          if (!sectionFootnotes.has(currentChapterId)) {
+            sectionFootnotes.set(currentChapterId, [])
+          }
+          sectionFootnotes.get(currentChapterId)!.push({ id: refId, footnote })
+        } else {
+          // Document end
+          documentFootnotes.push({ id: refId, footnote })
+        }
+      }
+
+      // For section-end placement, add footnotes when starting a new chapter
+      if (footnotePlacement === 'section-end' && headingLevel === 1 && currentChapterId) {
+        const prevChapterId = findPreviousChapter(mergedSections, section.id)
+        if (prevChapterId && sectionFootnotes.has(prevChapterId)) {
+          const footnotes = sectionFootnotes.get(prevChapterId)!
+          if (footnotes.length > 0) {
+            output.push(formatFootnoteBlock(footnotes))
+          }
+          sectionFootnotes.delete(prevChapterId)
+        }
       }
     }
 
-    // For section-end placement, add footnotes when starting a new chapter
-    if (footnotePlacement === 'section-end' && headingLevel === 1 && currentChapterId) {
-      const prevChapterId = findPreviousChapter(mergedSections, section.id)
-      if (prevChapterId && sectionFootnotes.has(prevChapterId)) {
-        const footnotes = sectionFootnotes.get(prevChapterId)!
+    // Step 6: Add remaining section-end footnotes
+    if (footnotePlacement === 'section-end') {
+      for (const [_chapterId, footnotes] of sectionFootnotes) {
         if (footnotes.length > 0) {
           output.push(formatFootnoteBlock(footnotes))
         }
-        sectionFootnotes.delete(prevChapterId)
       }
     }
-  }
 
-  // Step 6: Add remaining section-end footnotes
-  if (footnotePlacement === 'section-end') {
-    for (const [_chapterId, footnotes] of sectionFootnotes) {
-      if (footnotes.length > 0) {
-        output.push(formatFootnoteBlock(footnotes))
+    // Step 7: Add document-end footnotes
+    if (footnotePlacement === 'document-end' && documentFootnotes.length > 0) {
+      output.push('')
+      output.push('---')
+      output.push('')
+      output.push('## Notes')
+      output.push('')
+      for (const { id, footnote } of documentFootnotes) {
+        output.push(formatFootnote(id, footnote))
       }
     }
-  }
 
-  // Step 7: Add document-end footnotes
-  if (footnotePlacement === 'document-end' && documentFootnotes.length > 0) {
-    output.push('')
-    output.push('---')
-    output.push('')
-    output.push('## Notes')
-    output.push('')
-    for (const { id, footnote } of documentFootnotes) {
-      output.push(formatFootnote(id, footnote))
-    }
-  }
+    // Step 8: Final cleanup
+    const markdown = yield* Effect.try({
+      try: () => {
+        let md = output.join('\n')
+        md = cleanupMarkdown(md)
+        return md
+      },
+      catch: error =>
+        new OrganizationError({
+          message: 'Failed to cleanup markdown output',
+          cause: error,
+        }),
+    })
 
-  // Step 8: Final cleanup
-  let markdown = output.join('\n')
-  markdown = cleanupMarkdown(markdown)
+    return markdown
+  })
+}
 
-  return markdown
+/**
+ * Async wrapper for organizeContent for UI compatibility.
+ * Use this when you need to call organizeContent from Promise-based code.
+ *
+ * @param rawContent - Extracted content from Pass 3
+ * @param structure - Structure profile from Pass 2
+ * @param provider - Optional LLM provider for cleanup pass (reserved for future use)
+ * @param options - Organization options
+ * @returns Promise that resolves to final markdown string
+ */
+export async function organizeContentAsync(
+  rawContent: RawContent,
+  structure: StructureProfile,
+  provider?: LLMProvider,
+  options: OrganizeOptions = {},
+): Promise<string> {
+  return Effect.runPromise(organizeContent(rawContent, structure, provider, options))
 }
 
 /**

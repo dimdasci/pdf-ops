@@ -11,6 +11,8 @@
  * understanding, such as books, academic papers, and technical manuals.
  */
 
+import { Effect } from 'effect'
+
 import type { LLMProvider } from '../llm/types'
 import type { PdfService } from '../pdf-service/types'
 
@@ -18,6 +20,7 @@ import { extractContent } from './content-extractor'
 import { analyzeLayout } from './layout-analyzer'
 import { organizeContent } from './organizer'
 import { analyzeStructure } from './structure-analyzer'
+import type { IntelligentPipelineError } from './types/errors'
 import type { LayoutProfile, StructureProfile } from './types/profiles'
 
 // =============================================================================
@@ -79,7 +82,7 @@ const PHASES: Record<number, PhaseInfo> = {
 }
 
 // =============================================================================
-// Main Pipeline Function
+// Main Pipeline Function (Effect-based)
 // =============================================================================
 
 /**
@@ -92,11 +95,132 @@ const PHASES: Record<number, PhaseInfo> = {
  * @param pdfService - Initialized PDF service with loaded document
  * @param provider - LLM provider for analysis and conversion
  * @param options - Pipeline options
- * @returns Complete conversion result with profiles and metadata
+ * @returns Effect producing complete conversion result with profiles and metadata
  *
  * @example
  * ```typescript
- * const result = await runIntelligentPipeline(pdfService, provider, {
+ * const program = runIntelligentPipeline(pdfService, provider, {
+ *   onProgress: (status, phase, total) => {
+ *     console.log(`[${phase}/${total}] ${status}`)
+ *   },
+ *   dpi: 150,
+ *   includeToc: true,
+ * })
+ *
+ * // Run the effect
+ * const result = await Effect.runPromise(program)
+ * console.log(result.markdown)
+ * ```
+ */
+export function runIntelligentPipeline(
+  pdfService: PdfService,
+  provider: LLMProvider,
+  options: IntelligentPipelineOptions = {},
+): Effect.Effect<IntelligentPipelineResult, IntelligentPipelineError> {
+  const { onProgress, dpi = 150, includeToc = true } = options
+
+  return Effect.gen(function*() {
+    const startTime = performance.now()
+    const pageCount = pdfService.getPageCount()
+
+    // Helper to report progress with phase context
+    const reportProgress = (phase: number, status: string) => {
+      onProgress?.(status, phase, TOTAL_PHASES)
+    }
+
+    // -------------------------------------------------------------------------
+    // Pass 1: Layout Analysis
+    // -------------------------------------------------------------------------
+    reportProgress(1, PHASES[1].status)
+
+    const layout = yield* analyzeLayout(pdfService, provider, {
+      onProgress: (status, current, total) => {
+        const detailedStatus = `${PHASES[1].name}: ${status} (${current}/${total})`
+        reportProgress(1, detailedStatus)
+      },
+      dpi,
+    })
+
+    reportProgress(1, `${PHASES[1].name} complete`)
+
+    // -------------------------------------------------------------------------
+    // Pass 2: Structure Analysis
+    // -------------------------------------------------------------------------
+    reportProgress(2, PHASES[2].status)
+
+    const structure = yield* analyzeStructure(pdfService, provider, layout)
+
+    reportProgress(2, `${PHASES[2].name} complete - detected: ${structure.documentType}`)
+
+    // -------------------------------------------------------------------------
+    // Pass 3: Content Extraction
+    // -------------------------------------------------------------------------
+    reportProgress(3, PHASES[3].status)
+
+    const rawContent = yield* extractContent(pdfService, provider, layout, structure, {
+      onProgress: (page, total) => {
+        const detailedStatus = `${PHASES[3].name}: Processing page ${page}/${total}`
+        reportProgress(3, detailedStatus)
+      },
+      dpi,
+    })
+
+    reportProgress(3, `${PHASES[3].name} complete - ${rawContent.sections.length} sections`)
+
+    // -------------------------------------------------------------------------
+    // Pass 4: Content Organization
+    // -------------------------------------------------------------------------
+    reportProgress(4, PHASES[4].status)
+
+    const markdown = yield* organizeContent(rawContent, structure, provider, {
+      includeToc,
+      tocMaxLevel: 3,
+      addSectionSpacing: true,
+    })
+
+    reportProgress(4, `${PHASES[4].name} complete`)
+
+    // -------------------------------------------------------------------------
+    // Build Result
+    // -------------------------------------------------------------------------
+    const processingTimeMs = Math.round(performance.now() - startTime)
+
+    // Detect language from structure or default to 'en'
+    const language = detectLanguage(structure, rawContent.sections)
+
+    return {
+      markdown,
+      metadata: {
+        pageCount,
+        language,
+        documentType: structure.documentType,
+        processingTimeMs,
+        pipeline: 'intelligent',
+      },
+      layout,
+      structure,
+    } as IntelligentPipelineResult
+  })
+}
+
+// =============================================================================
+// Async Wrapper
+// =============================================================================
+
+/**
+ * Async wrapper for running the intelligent pipeline.
+ *
+ * This provides a Promise-based API for UI compatibility while using
+ * the Effect-based implementation internally.
+ *
+ * @param pdfService - Initialized PDF service with loaded document
+ * @param provider - LLM provider for analysis and conversion
+ * @param options - Pipeline options
+ * @returns Promise resolving to complete conversion result
+ *
+ * @example
+ * ```typescript
+ * const result = await runIntelligentPipelineAsync(pdfService, provider, {
  *   onProgress: (status, phase, total) => {
  *     console.log(`[${phase}/${total}] ${status}`)
  *   },
@@ -106,93 +230,12 @@ const PHASES: Record<number, PhaseInfo> = {
  * console.log(result.markdown)
  * ```
  */
-export async function runIntelligentPipeline(
+export async function runIntelligentPipelineAsync(
   pdfService: PdfService,
   provider: LLMProvider,
   options: IntelligentPipelineOptions = {},
 ): Promise<IntelligentPipelineResult> {
-  const { onProgress, dpi = 150, includeToc = true } = options
-  const startTime = performance.now()
-
-  const pageCount = pdfService.getPageCount()
-
-  // Helper to report progress with phase context
-  const reportProgress = (phase: number, status: string) => {
-    onProgress?.(status, phase, TOTAL_PHASES)
-  }
-
-  // -------------------------------------------------------------------------
-  // Pass 1: Layout Analysis
-  // -------------------------------------------------------------------------
-  reportProgress(1, PHASES[1].status)
-
-  const layout = await analyzeLayout(pdfService, provider, {
-    onProgress: (status, current, total) => {
-      const detailedStatus = `${PHASES[1].name}: ${status} (${current}/${total})`
-      reportProgress(1, detailedStatus)
-    },
-    dpi,
-  })
-
-  reportProgress(1, `${PHASES[1].name} complete`)
-
-  // -------------------------------------------------------------------------
-  // Pass 2: Structure Analysis
-  // -------------------------------------------------------------------------
-  reportProgress(2, PHASES[2].status)
-
-  const structure = await analyzeStructure(pdfService, provider, layout)
-
-  reportProgress(2, `${PHASES[2].name} complete - detected: ${structure.documentType}`)
-
-  // -------------------------------------------------------------------------
-  // Pass 3: Content Extraction
-  // -------------------------------------------------------------------------
-  reportProgress(3, PHASES[3].status)
-
-  const rawContent = await extractContent(pdfService, provider, layout, structure, {
-    onProgress: (page, total) => {
-      const detailedStatus = `${PHASES[3].name}: Processing page ${page}/${total}`
-      reportProgress(3, detailedStatus)
-    },
-    dpi,
-  })
-
-  reportProgress(3, `${PHASES[3].name} complete - ${rawContent.sections.length} sections`)
-
-  // -------------------------------------------------------------------------
-  // Pass 4: Content Organization
-  // -------------------------------------------------------------------------
-  reportProgress(4, PHASES[4].status)
-
-  const markdown = await organizeContent(rawContent, structure, provider, {
-    includeToc,
-    tocMaxLevel: 3,
-    addSectionSpacing: true,
-  })
-
-  reportProgress(4, `${PHASES[4].name} complete`)
-
-  // -------------------------------------------------------------------------
-  // Build Result
-  // -------------------------------------------------------------------------
-  const processingTimeMs = Math.round(performance.now() - startTime)
-
-  // Detect language from structure or default to 'en'
-  const language = detectLanguage(structure, rawContent.sections)
-
-  return {
-    markdown,
-    metadata: {
-      pageCount,
-      language,
-      documentType: structure.documentType,
-      processingTimeMs,
-      pipeline: 'intelligent',
-    },
-    layout,
-    structure,
-  }
+  return Effect.runPromise(runIntelligentPipeline(pdfService, provider, options))
 }
 
 // =============================================================================

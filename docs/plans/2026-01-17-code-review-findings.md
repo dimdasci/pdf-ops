@@ -5,13 +5,13 @@ Reviewers: effect-ts-architect, code-reviewer
 
 ## Status Summary
 
-| Item | Status |
-|------|--------|
-| Bug 1: PDF Preview | ✅ COMPLETE |
-| Bug 3: Link Handling | ✅ COMPLETE |
+| Item                   | Status              |
+| ---------------------- | ------------------- |
+| Bug 1: PDF Preview     | ✅ COMPLETE         |
+| Bug 3: Link Handling   | ✅ COMPLETE         |
 | Bug 2: 4-Pass Pipeline | ⚠️ NEEDS REFACTORING |
-| Model Selection | ❌ NOT IMPLEMENTED |
-| Tests | ❌ NOT IMPLEMENTED |
+| Model Selection        | ❌ NOT IMPLEMENTED  |
+| Tests                  | ❌ NOT IMPLEMENTED  |
 
 ---
 
@@ -22,6 +22,7 @@ Reviewers: effect-ts-architect, code-reviewer
 **Problem**: All new pipeline files use raw `async/await` with `Promise<T>` instead of Effect.ts patterns.
 
 **Files to refactor**:
+
 - `src/lib/pipeline/intelligent-pipeline.ts`
 - `src/lib/pipeline/layout-analyzer.ts`
 - `src/lib/pipeline/structure-analyzer.ts`
@@ -31,6 +32,7 @@ Reviewers: effect-ts-architect, code-reviewer
 **What to do**:
 
 1. Change return types from `Promise<T>` to `Effect.Effect<T, PipelineError>`:
+
 ```typescript
 // BEFORE (current):
 export async function runIntelligentPipeline(...): Promise<IntelligentPipelineResult>
@@ -40,6 +42,7 @@ export function runIntelligentPipeline(...): Effect.Effect<IntelligentPipelineRe
 ```
 
 2. Use `Effect.gen` for async operations:
+
 ```typescript
 export function runIntelligentPipeline(
   pdfService: PdfService,
@@ -57,6 +60,7 @@ export function runIntelligentPipeline(
 ```
 
 3. Keep async versions as wrappers for UI compatibility:
+
 ```typescript
 // For React components that need Promise
 export async function runIntelligentPipelineAsync(...): Promise<IntelligentPipelineResult> {
@@ -73,30 +77,39 @@ export async function runIntelligentPipelineAsync(...): Promise<IntelligentPipel
 **What to do**:
 
 1. Add error types to `src/lib/pipeline/types/profiles.ts` or create `src/lib/pipeline/types/errors.ts`:
+
 ```typescript
 import { Schema } from 'effect'
 
-export class LayoutAnalysisError extends Schema.TaggedError<LayoutAnalysisError>()('LayoutAnalysisError', {
-  message: Schema.String,
-  pageNumber: Schema.optional(Schema.Number),
-  cause: Schema.optional(Schema.Unknown),
-}) {}
+export class LayoutAnalysisError
+  extends Schema.TaggedError<LayoutAnalysisError>()('LayoutAnalysisError', {
+    message: Schema.String,
+    pageNumber: Schema.optional(Schema.Number),
+    cause: Schema.optional(Schema.Unknown),
+  })
+{}
 
-export class StructureAnalysisError extends Schema.TaggedError<StructureAnalysisError>()('StructureAnalysisError', {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Unknown),
-}) {}
+export class StructureAnalysisError
+  extends Schema.TaggedError<StructureAnalysisError>()('StructureAnalysisError', {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
+  })
+{}
 
-export class ContentExtractionError extends Schema.TaggedError<ContentExtractionError>()('ContentExtractionError', {
-  message: Schema.String,
-  pageNumber: Schema.optional(Schema.Number),
-  cause: Schema.optional(Schema.Unknown),
-}) {}
+export class ContentExtractionError
+  extends Schema.TaggedError<ContentExtractionError>()('ContentExtractionError', {
+    message: Schema.String,
+    pageNumber: Schema.optional(Schema.Number),
+    cause: Schema.optional(Schema.Unknown),
+  })
+{}
 
-export class OrganizationError extends Schema.TaggedError<OrganizationError>()('OrganizationError', {
-  message: Schema.String,
-  cause: Schema.optional(Schema.Unknown),
-}) {}
+export class OrganizationError
+  extends Schema.TaggedError<OrganizationError>()('OrganizationError', {
+    message: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
+  })
+{}
 
 export type IntelligentPipelineError =
   | LayoutAnalysisError
@@ -106,6 +119,7 @@ export type IntelligentPipelineError =
 ```
 
 2. Replace try/catch with Effect error handling:
+
 ```typescript
 // BEFORE:
 try {
@@ -120,23 +134,25 @@ try {
 return pipe(
   Effect.tryPromise({
     try: () => provider.chat(prompt),
-    catch: (error) => new LayoutAnalysisError({
-      message: `Layout analysis failed for page ${pageNumber}`,
-      pageNumber,
-      cause: error
-    })
+    catch: error =>
+      new LayoutAnalysisError({
+        message: `Layout analysis failed for page ${pageNumber}`,
+        pageNumber,
+        cause: error,
+      }),
   }),
-  Effect.flatMap((response) =>
+  Effect.flatMap(response =>
     Effect.try({
       try: () => parseLayoutResponse(response, pageNumber),
-      catch: (error) => new LayoutAnalysisError({
-        message: `Failed to parse layout response for page ${pageNumber}`,
-        pageNumber,
-        cause: error
-      })
+      catch: error =>
+        new LayoutAnalysisError({
+          message: `Failed to parse layout response for page ${pageNumber}`,
+          pageNumber,
+          cause: error,
+        }),
     })
   ),
-  Effect.catchAll(() => Effect.succeed(getDefaultPageAnalysis(pageNumber)))  // Fallback
+  Effect.catchAll(() => Effect.succeed(getDefaultPageAnalysis(pageNumber))), // Fallback
 )
 ```
 
@@ -147,6 +163,7 @@ return pipe(
 **Problem**: LLM calls (`provider.convertPage`, `provider.chat`) have no retry on failure.
 
 **Files affected**:
+
 - `layout-analyzer.ts` lines 262-306
 - `structure-analyzer.ts` lines 75-94
 - `content-extractor.ts` lines 116-123
@@ -218,10 +235,10 @@ Add conditions in `determineComplexityLevel()` (around line 413) to recommend in
 ```typescript
 // Add to determineComplexityLevel function:
 if (
-  analysis.hasComplexLayout ||  // Multi-column, mixed layouts
-  analysis.hasFootnotes ||      // Documents with footnotes benefit from 4-pass
-  pageCount > 20 ||             // Longer documents benefit from structure analysis
-  analysis.documentType !== 'simple'
+  analysis.hasComplexLayout // Multi-column, mixed layouts
+  || analysis.hasFootnotes // Documents with footnotes benefit from 4-pass
+  || pageCount > 20 // Longer documents benefit from structure analysis
+  || analysis.documentType !== 'simple'
 ) {
   return 'intelligent'
 }
@@ -236,11 +253,13 @@ if (
 **What to do**:
 
 Create test files:
+
 - `tests/unit/pipeline/layout-analyzer.test.ts`
 - `tests/unit/pipeline/structure-analyzer.test.ts`
 - `tests/unit/pipeline/organizer.test.ts`
 
 Focus on testing pure utility functions:
+
 - `parseLayoutResponse()` in layout-analyzer.ts
 - `parseStructureResponse()` in structure-analyzer.ts
 - `mergePartialParagraphs()` in organizer.ts
@@ -248,15 +267,16 @@ Focus on testing pure utility functions:
 - `validateHeadingHierarchy()` in organizer.ts
 
 Example test:
+
 ```typescript
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mergePartialParagraphs } from '../../../src/lib/pipeline/organizer'
 
 describe('mergePartialParagraphs', () => {
   it('should merge sections with continuations', () => {
     const sections = [
       { id: '1', content: 'First part of paragraph', continuesTo: '2' },
-      { id: '2', content: 'second part.', continuesFrom: '1' }
+      { id: '2', content: 'second part.', continuesFrom: '1' },
     ]
     const result = mergePartialParagraphs(sections)
     expect(result[0].content).toBe('First part of paragraph second part.')
@@ -271,6 +291,7 @@ describe('mergePartialParagraphs', () => {
 ### Model Selection Enhancement
 
 Defer to follow-up PR. Create issue to track:
+
 - Create `src/lib/llm/model-config.ts`
 - Add Settings UI for model selection
 - Allow per-pass model override
@@ -280,6 +301,7 @@ Defer to follow-up PR. Create issue to track:
 **File**: `content-extractor.ts` line 350
 
 The `dataUrl` is set to empty string with comment "Will be filled by cropping later" but no cropping logic exists. Either:
+
 - Implement image cropping using `pdfService.cropImage()`
 - Or remove the field if not needed
 
