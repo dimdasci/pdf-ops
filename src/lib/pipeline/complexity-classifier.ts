@@ -12,7 +12,7 @@ import type { EmbeddedImage, PdfService } from '../pdf-service/types'
 // ============================================================================
 
 export type ComplexityLevel = 'simple' | 'moderate' | 'complex'
-export type PipelineType = 'direct' | 'light' | 'full'
+export type PipelineType = 'direct' | 'light' | 'full' | 'intelligent'
 export type TextDensity = 'sparse' | 'normal' | 'dense'
 
 export interface ComplexityFactors {
@@ -499,10 +499,11 @@ function estimateProcessingTime(
   pipeline: PipelineType,
 ): number {
   // Base time per page (seconds)
-  const baseTimePerPage = {
+  const baseTimePerPage: Record<PipelineType, number> = {
     direct: 3,
     light: 5,
     full: 8,
+    intelligent: 10,
   }
 
   let time = factors.pageCount * baseTimePerPage[pipeline]

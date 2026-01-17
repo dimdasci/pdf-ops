@@ -15,6 +15,7 @@ import {
 } from './complexity-classifier'
 import { type DirectPipelineResult, runDirectPipeline } from './direct-pipeline'
 import { type FullPipelineResult, runFullPipeline } from './full-pipeline'
+import { type IntelligentPipelineResult, runIntelligentPipeline } from './intelligent-pipeline'
 import { type LightPipelineResult, runLightPipeline } from './light-pipeline'
 
 // ============================================================================
@@ -129,6 +130,18 @@ export async function convertDocument(
       break
     }
 
+    case 'intelligent': {
+      const intelligentResult = await runIntelligentPipeline(pdfService, provider, {
+        onProgress: (status, phase, totalPhases) => {
+          const percent = 5 + Math.floor((phase / totalPhases) * 90)
+          onProgress?.(status, percent, 100)
+        },
+        dpi,
+      })
+      result = mapIntelligentResult(intelligentResult, complexity)
+      break
+    }
+
     default:
       throw new Error(`Unknown pipeline type: ${pipelineType}`)
   }
@@ -201,6 +214,62 @@ function mapFullResult(
   }
 }
 
+function mapIntelligentResult(
+  result: IntelligentPipelineResult,
+  complexity: DocumentComplexity,
+): ConversionResult {
+  // Convert TOC entries to headings format
+  const headings = flattenTocToHeadings(result.structure.toc.entries)
+
+  return {
+    markdown: result.markdown,
+    contents: [result.markdown], // Intelligent pipeline returns unified content
+    metadata: {
+      pageCount: result.metadata.pageCount,
+      language: result.metadata.language,
+      hasTOC: result.structure.toc.explicit,
+      processingTimeMs: result.metadata.processingTimeMs,
+      pipeline: 'intelligent',
+      complexity: complexity.level,
+    },
+    structure: {
+      headings,
+      sections: [],
+      headingsByPage: new Map(),
+      maxDepth: result.structure.hierarchy.maxDepth,
+    },
+    complexity,
+  }
+}
+
+/**
+ * Flatten TOC entries into a flat list of heading info.
+ */
+function flattenTocToHeadings(
+  entries: Array<{ level: number; title: string; page: number; children?: unknown[] }>,
+): Array<{ level: number; text: string; page: number }> {
+  const result: Array<{ level: number; text: string; page: number }> = []
+
+  for (const entry of entries) {
+    result.push({
+      level: entry.level,
+      text: entry.title,
+      page: entry.page,
+    })
+    if (entry.children && Array.isArray(entry.children)) {
+      result.push(
+        ...flattenTocToHeadings(
+          entry.children as Array<
+            { level: number; title: string; page: number; children?: unknown[] }
+          >,
+        ),
+      )
+    }
+  }
+
+  return result
+}
+
 // ============================================================================
 // Exports
 // ============================================================================
@@ -240,3 +309,8 @@ export type {
   RobustConversionResult,
   WindowProcessingOptions,
 } from './robust-pipeline'
+
+// Intelligent 4-pass pipeline
+export { runIntelligentPipeline } from './intelligent-pipeline'
+
+export type { IntelligentPipelineOptions, IntelligentPipelineResult } from './intelligent-pipeline'
