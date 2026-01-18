@@ -31,7 +31,11 @@ let window: Page
 test.beforeAll(async () => {
   // Launch Electron app from built output
   electronApp = await electron.launch({
-    args: [path.join(__dirname, '../../dist-electron/main.js')],
+    args: [
+      '--no-sandbox',
+      '--disable-gpu',
+      path.join(__dirname, '../../dist-electron/main.js'),
+    ],
     env: {
       ...process.env,
       NODE_ENV: 'test',
