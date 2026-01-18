@@ -1,5 +1,5 @@
 import { FileText, Settings } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DropZone } from './components/DropZone'
 import { SettingsModal } from './components/SettingsModal'
 import { Workspace } from './components/Workspace'
@@ -14,6 +14,19 @@ function App() {
 
     setCurrentFile(filePath)
   }
+
+  // Test helper: allow integration tests to load PDFs programmatically
+  // This event is only dispatched by Playwright tests, so it's safe to always listen
+  useEffect(() => {
+    const handleTestLoadPdf = (event: CustomEvent<{ filePath: string }>) => {
+      handleFileSelect(event.detail.filePath)
+    }
+
+    window.addEventListener('test:load-pdf', handleTestLoadPdf as EventListener)
+    return () => {
+      window.removeEventListener('test:load-pdf', handleTestLoadPdf as EventListener)
+    }
+  }, [])
 
   console.log('App render. currentFile:', currentFile)
 
