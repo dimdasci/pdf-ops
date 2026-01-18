@@ -7,6 +7,7 @@ interface ApiKeys {
 
 interface Window {
   electronAPI: {
+    isTestMode: boolean
     getFilePath: (file: File) => string
     // Legacy handlers (backward compatibility)
     saveApiKey: (key: string) => Promise<boolean>

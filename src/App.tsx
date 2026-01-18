@@ -16,10 +16,11 @@ function App() {
   }
 
   // Test helper: allow integration tests to load PDFs programmatically
-  // Only active in development mode; tree-shaken from production builds
+  // Active in development mode and test/CI environments
   useEffect(() => {
     const handleTestLoadPdf = (event: CustomEvent<{ filePath: string }>) => {
-      if (import.meta.env.DEV) {
+      // Allow in dev mode (Vite) or test mode (Electron with NODE_ENV=test)
+      if (import.meta.env.DEV || window.electronAPI?.isTestMode) {
         handleFileSelect(event.detail.filePath)
       }
     }

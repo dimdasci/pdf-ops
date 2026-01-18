@@ -5,7 +5,11 @@ interface ApiKeys {
   anthropic?: string
 }
 
+// Test mode flag - enabled in test/CI environments
+const isTestMode = process.env.NODE_ENV === 'test' || process.env.CI === 'true'
+
 contextBridge.exposeInMainWorld('electronAPI', {
+  isTestMode,
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   // Legacy handlers (backward compatibility)
   saveApiKey: (key: string) => ipcRenderer.invoke('save-api-key', key),
