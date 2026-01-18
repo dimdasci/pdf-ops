@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } from 'electron'
 import fs from 'fs'
 import path from 'path'
 
@@ -31,6 +31,22 @@ const createWindow = () => {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
+
+  // Block unwanted navigation
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // Only allow navigation to app's own URLs
+    if (!url.startsWith('file://') && !url.includes('localhost')) {
+      event.preventDefault()
+    }
+  })
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // External links open in browser
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url)
+    }
+    return { action: 'deny' } // Never open new Electron windows
+  })
 }
 
 // This method will be called when Electron has finished
@@ -158,6 +174,16 @@ ipcMain.handle('save-markdown-file', async (event, content: string) => {
 
   if (!canceled && filePath) {
     fs.writeFileSync(filePath, content)
+    return true
+  }
+  return false
+})
+
+// External link handler
+ipcMain.handle('open-external', async (_, url: string) => {
+  // Validate URL before opening
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    await shell.openExternal(url)
     return true
   }
   return false

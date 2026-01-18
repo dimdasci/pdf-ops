@@ -160,6 +160,8 @@ export async function convertDocumentRobust(
             avgCharsPerPage: 0,
             hasCodeBlocks: false,
             hasMathFormulas: false,
+            hasFootnotes: false,
+            hasMultiColumnLayout: false,
           },
           recommendedPipeline: 'direct',
           estimatedTimeSeconds: 0,

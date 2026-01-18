@@ -12,7 +12,7 @@ import type { EmbeddedImage, PdfService } from '../pdf-service/types'
 // ============================================================================
 
 export type ComplexityLevel = 'simple' | 'moderate' | 'complex'
-export type PipelineType = 'direct' | 'light' | 'full'
+export type PipelineType = 'direct' | 'light' | 'full' | 'intelligent'
 export type TextDensity = 'sparse' | 'normal' | 'dense'
 
 export interface ComplexityFactors {
@@ -35,6 +35,10 @@ export interface ComplexityFactors {
   /** Presence of special content */
   hasCodeBlocks: boolean
   hasMathFormulas: boolean
+  /** Whether document has footnotes or endnotes */
+  hasFootnotes: boolean
+  /** Whether document has multi-column layout */
+  hasMultiColumnLayout: boolean
 }
 
 export interface DocumentComplexity {
@@ -230,6 +234,8 @@ function calculateFactors(
   // Check for special content
   const hasCodeBlocks = samples.some(s => detectCodePatterns(s.text))
   const hasMathFormulas = samples.some(s => detectMathPatterns(s.text))
+  const hasFootnotes = samples.some(s => detectFootnotePatterns(s.text))
+  const hasMultiColumnLayout = samples.some(s => detectMultiColumnLayout(s.text))
 
   return {
     pageCount,
@@ -242,6 +248,8 @@ function calculateFactors(
     avgCharsPerPage,
     hasCodeBlocks,
     hasMathFormulas,
+    hasFootnotes,
+    hasMultiColumnLayout,
   }
 }
 
@@ -371,6 +379,45 @@ function detectMathPatterns(text: string): boolean {
 }
 
 /**
+ * Detect footnote patterns in text.
+ * Looks for numbered superscripts, footnote markers, and bottom-of-page references.
+ */
+function detectFootnotePatterns(text: string): boolean {
+  const patterns = [
+    /\[\d+\]/, // Bracketed numbers [1], [2]
+    /\(\d+\)/, // Parenthesized numbers (1), (2) when followed by text
+    /\d+\.\s+[A-Z].*\n/m, // Numbered references at line start
+    /[¹²³⁴⁵⁶⁷⁸⁹⁰]+/, // Unicode superscript numbers
+    /\*{1,3}\s+\w/, // Asterisk footnote markers
+    /†|‡|§/, // Traditional footnote symbols
+    /^[\t\s]*\d+[.)]\s+.{10,}/m, // Footnote-like numbered lines
+  ]
+
+  return patterns.some(pattern => pattern.test(text))
+}
+
+/**
+ * Detect multi-column layout patterns in text.
+ * Looks for column-like text distribution and irregular spacing.
+ */
+function detectMultiColumnLayout(text: string): boolean {
+  const lines = text.split('\n')
+
+  // Check for multiple consistent whitespace gaps in lines (column separators)
+  let columnGapCount = 0
+  for (const line of lines) {
+    // Multiple large whitespace gaps suggest columns
+    const gaps = line.match(/\s{4,}/g)
+    if (gaps && gaps.length >= 1) {
+      columnGapCount++
+    }
+  }
+
+  // If more than 20% of lines have column-like gaps, likely multi-column
+  return lines.length > 5 && columnGapCount / lines.length > 0.2
+}
+
+/**
  * Calculate overall complexity score (0-100).
  */
 function calculateComplexityScore(factors: ComplexityFactors): number {
@@ -429,6 +476,55 @@ function determineComplexityLevel(
     return {
       level: 'simple',
       pipeline: 'direct',
+      reasoning,
+    }
+  }
+
+  // Check if intelligent pipeline would be beneficial
+  // Intelligent pipeline uses 4-pass analysis for complex layouts
+  const shouldUseIntelligent = factors.hasMultiColumnLayout // Multi-column layouts need careful analysis
+    || factors.hasFootnotes // Footnotes benefit from 4-pass processing
+    || factors.pageCount > 20 // Longer documents benefit from structure analysis
+    || (factors.hasEmbeddedTOC && factors.structureDepth > 2) // Complex structure
+    || factors.estimatedTables > 5 // Many tables need intelligent extraction
+    || (factors.estimatedImages > 10 && factors.textDensity === 'dense') // Mixed content
+
+  if (shouldUseIntelligent) {
+    if (factors.hasMultiColumnLayout) {
+      reasoning.push(
+        'Multi-column layout detected - using intelligent pipeline for accurate extraction',
+      )
+    }
+    if (factors.hasFootnotes) {
+      reasoning.push('Footnotes detected - intelligent pipeline preserves reference structure')
+    }
+    if (factors.pageCount > 20) {
+      reasoning.push(
+        `Document length (${factors.pageCount} pages) benefits from structure analysis`,
+      )
+    }
+    if (factors.hasEmbeddedTOC && factors.structureDepth > 2) {
+      reasoning.push(
+        `Complex document structure (${factors.structureDepth} levels) requires intelligent processing`,
+      )
+    }
+    if (factors.estimatedTables > 5) {
+      reasoning.push(`Multiple tables (${factors.estimatedTables}) benefit from 4-pass analysis`)
+    }
+    if (factors.estimatedImages > 10 && factors.textDensity === 'dense') {
+      reasoning.push('Dense mixed content with images requires intelligent extraction')
+    }
+
+    // Determine complexity level based on score
+    const level: ComplexityLevel = score >= complexThreshold
+      ? 'complex'
+      : score >= moderateThreshold
+      ? 'moderate'
+      : 'moderate' // Upgrade simple to moderate when using intelligent
+
+    return {
+      level,
+      pipeline: 'intelligent',
       reasoning,
     }
   }
@@ -499,10 +595,11 @@ function estimateProcessingTime(
   pipeline: PipelineType,
 ): number {
   // Base time per page (seconds)
-  const baseTimePerPage = {
+  const baseTimePerPage: Record<PipelineType, number> = {
     direct: 3,
     light: 5,
     full: 8,
+    intelligent: 10,
   }
 
   let time = factors.pageCount * baseTimePerPage[pipeline]

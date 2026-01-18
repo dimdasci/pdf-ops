@@ -7,6 +7,7 @@ interface ApiKeys {
 
 interface Window {
   electronAPI: {
+    isTestMode: boolean
     getFilePath: (file: File) => string
     // Legacy handlers (backward compatibility)
     saveApiKey: (key: string) => Promise<boolean>
@@ -19,5 +20,7 @@ interface Window {
     // File system handlers
     readFileBuffer: (path: string) => Promise<Uint8Array>
     saveMarkdownFile: (content: string) => Promise<boolean>
+    // External link handler
+    openExternal: (url: string) => Promise<boolean>
   }
 }
