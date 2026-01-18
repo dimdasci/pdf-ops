@@ -16,10 +16,12 @@ function App() {
   }
 
   // Test helper: allow integration tests to load PDFs programmatically
-  // This event is only dispatched by Playwright tests, so it's safe to always listen
+  // Only active in development mode; tree-shaken from production builds
   useEffect(() => {
     const handleTestLoadPdf = (event: CustomEvent<{ filePath: string }>) => {
-      handleFileSelect(event.detail.filePath)
+      if (import.meta.env.DEV) {
+        handleFileSelect(event.detail.filePath)
+      }
     }
 
     window.addEventListener('test:load-pdf', handleTestLoadPdf as EventListener)
