@@ -13,6 +13,11 @@
  */
 import { _electron as electron, ElectronApplication, expect, Page, test } from '@playwright/test'
 import * as path from 'path'
+import { fileURLToPath } from 'url'
+
+// ESM-compatible __dirname equivalent
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Skip workflow tests unless explicitly enabled
 test.skip(
